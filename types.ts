@@ -1,4 +1,3 @@
-
 export enum ListingCategory {
   HOUSE_RENT = 'House Rent',
   HOUSE_SALE = 'House Sale',
@@ -21,12 +20,12 @@ export interface PropertyListing {
   location: string;
   category: ListingCategory;
   area: string;
-  imageUrl: string;
+  areaUnit: 'sq.ft' | 'sq.mt';
+  imageUrls: string[]; // Changed to array for multiple images
   ownerId: string;
   ownerName: string;
   contactNumber: string;
   postedAt: number;
-  // New Specification Fields
   bhk?: string;
   bathrooms?: string;
   parking?: 'Yes' | 'No';
@@ -46,6 +45,7 @@ export type ViewState = 'home' | 'post' | 'details' | 'profile';
 export interface ChatMessage {
   id: string;
   senderId: string;
+  senderName: string;
   text: string;
   timestamp: number;
 }

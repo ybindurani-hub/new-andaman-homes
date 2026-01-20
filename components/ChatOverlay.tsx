@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, PropertyListing, ChatMessage } from '../types.ts';
 import { Icons } from '../constants.tsx';
+import { sendMessage, listenToMessages } from '../services/firebase.ts';
 
 interface ChatOverlayProps {
   isOpen: boolean;
@@ -16,51 +16,29 @@ const ChatOverlay: React.FC<ChatOverlayProps> = ({ isOpen, onClose, user, listin
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      // Initial greeting from owner
-      setMessages([{
-        id: 'welcome',
-        senderId: 'owner',
-        text: `Hi ${user.name.split(' ')[0]}! Thanks for inquiring about my property "${listing.title}". How can I help you today?`,
-        timestamp: Date.now()
-      }]);
+    if (isOpen) {
+      const unsubscribe = listenToMessages(listing.id, listing.ownerId, user.id, (newMessages) => {
+        setMessages(newMessages);
+      });
+      return () => unsubscribe();
     }
-  }, [isOpen]);
+  }, [isOpen, listing.id, listing.ownerId, user.id]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputText.trim()) return;
-
-    const newUserMessage: ChatMessage = {
-      id: Date.now().toString(),
-      senderId: user.id,
-      text: inputText,
-      timestamp: Date.now()
-    };
-
-    setMessages(prev => [...prev, newUserMessage]);
+    const text = inputText;
     setInputText('');
-
-    // Simulate owner response
-    setTimeout(() => {
-      const responses = [
-        "That sounds good. Would you like to schedule a visit this weekend?",
-        "Yes, the price is slightly negotiable if you're interested in a long-term lease.",
-        "The property is currently available. Can I call you to discuss details?",
-        "Sure, I can send you more photos on WhatsApp if you prefer."
-      ];
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        senderId: 'owner',
-        text: randomResponse,
-        timestamp: Date.now()
-      }]);
-    }, 1500);
+    
+    try {
+      await sendMessage(listing.id, listing.ownerId, user, text);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Failed to send message.");
+    }
   };
 
   if (!isOpen) return null;
@@ -68,7 +46,6 @@ const ChatOverlay: React.FC<ChatOverlayProps> = ({ isOpen, onClose, user, listin
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-[2rem] w-full max-w-lg h-[600px] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
-        {/* Chat Header */}
         <div className="bg-teal-600 p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
              <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center font-bold text-lg">
@@ -84,41 +61,45 @@ const ChatOverlay: React.FC<ChatOverlayProps> = ({ isOpen, onClose, user, listin
           </button>
         </div>
 
-        {/* Listing Context */}
         <div className="bg-slate-50 p-3 border-b border-slate-100 flex items-center gap-3">
-           <img src={listing.imageUrl} className="w-12 h-12 rounded-lg object-cover" alt="" />
+           <img src={listing.imageUrls[0]} className="w-12 h-12 rounded-lg object-cover" alt="" />
            <div className="overflow-hidden">
              <p className="text-xs font-bold text-slate-700 truncate">{listing.title}</p>
              <p className="text-[10px] text-teal-600 font-bold">₹ {listing.price.toLocaleString()}</p>
            </div>
         </div>
 
-        {/* Message Area */}
         <div className="flex-grow overflow-y-auto p-6 space-y-4">
-          {messages.map((msg) => {
-            const isMe = msg.senderId === user.id;
-            return (
-              <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-4 rounded-2xl text-sm font-medium ${
-                  isMe ? 'bg-teal-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-700 rounded-tl-none'
-                }`}>
-                  {msg.text}
-                  <p className={`text-[9px] mt-1 ${isMe ? 'text-teal-200' : 'text-slate-400'}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-2">
+               <Icons.Message />
+               <p className="text-xs font-bold uppercase tracking-widest">Start the conversation</p>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isMe = msg.senderId === user.id;
+              return (
+                <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium ${
+                    isMe ? 'bg-teal-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-700 rounded-tl-none'
+                  }`}>
+                    {msg.text}
+                    <p className={`text-[9px] mt-1 ${isMe ? 'text-teal-200' : 'text-slate-400'}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input Area */}
         <div className="p-4 bg-white border-t border-slate-100">
            <div className="flex items-center gap-2 bg-slate-50 rounded-2xl p-2 pl-4 border border-slate-200 focus-within:border-teal-400 transition-all">
              <input 
                type="text" 
-               placeholder="Type a message..."
+               placeholder="Write a message..."
                className="flex-grow bg-transparent outline-none text-sm font-medium py-2"
                value={inputText}
                onChange={(e) => setInputText(e.target.value)}
@@ -126,7 +107,8 @@ const ChatOverlay: React.FC<ChatOverlayProps> = ({ isOpen, onClose, user, listin
              />
              <button 
                onClick={handleSend}
-               className="bg-teal-600 text-white p-2.5 rounded-xl hover:bg-teal-700 transition-colors shadow-lg shadow-teal-600/20"
+               disabled={!inputText.trim()}
+               className="bg-teal-600 text-white p-2.5 rounded-xl hover:bg-teal-700 transition-colors disabled:opacity-50"
              >
                <Icons.Send />
              </button>

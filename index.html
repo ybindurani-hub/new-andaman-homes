@@ -6,10 +6,10 @@
     <title>Andaman Homes | Real Estate in Paradise</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
         body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
         .font-display { font-family: 'Playfair Display', serif; }
-        /* Smooth transitions for all elements */
         * { transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out; }
         
         #error-display {
@@ -20,19 +20,19 @@
             z-index: 9999; padding: 2rem; font-family: monospace;
             overflow: auto;
         }
+
+        /* Hide reCAPTCHA badge if needed, but keep it in the DOM */
+        .grecaptcha-badge { visibility: hidden; }
     </style>
     <script>
-        // Polyfill for process.env to prevent crashes in the browser
         window.process = window.process || { env: {} };
         if (typeof window.process.env !== 'object') {
             window.process.env = {};
         }
-        // Ensure API_KEY is at least a string to avoid undefined checks failing
         if (!window.process.env.API_KEY) {
             window.process.env.API_KEY = "";
         }
 
-        // Global error catcher to help debug white pages
         window.addEventListener('error', function(e) {
             console.error('App Boot Error:', e);
             const display = document.getElementById('error-display');
@@ -42,7 +42,6 @@
             }
         });
         
-        // Catch unhandled promise rejections (often from module loading failures)
         window.addEventListener('unhandledrejection', function(e) {
             console.error('Unhandled Rejection:', e.reason);
             const display = document.getElementById('error-display');
@@ -67,6 +66,8 @@
 </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
+    <!-- Stable reCAPTCHA container to prevent "removed: 0" error -->
+    <div id="recaptcha-container"></div>
     <div id="error-display"><h1>Application Startup Error</h1><p>Check console for details.</p><hr></div>
     <div id="root"></div>
     <script type="module" src="index.tsx"></script>

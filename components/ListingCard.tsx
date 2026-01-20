@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { PropertyListing, ListingCategory } from '../types.ts';
+import { PropertyListing } from '../types.ts';
 import { Icons } from '../constants.tsx';
 
 interface ListingCardProps {
@@ -18,6 +17,11 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
     }).format(price);
   };
 
+  // Safe fallback for images
+  const mainImage = listing.imageUrls && listing.imageUrls.length > 0 
+    ? listing.imageUrls[0] 
+    : (listing as any).imageUrl || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=1200';
+
   return (
     <div 
       onClick={() => onClick(listing)}
@@ -25,7 +29,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
     >
       <div className="relative h-56 overflow-hidden">
         <img 
-          src={listing.imageUrl} 
+          src={mainImage} 
           alt={listing.title}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
         />
@@ -45,14 +49,11 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
         <h3 className="text-lg font-bold text-slate-800 line-clamp-1 group-hover:text-teal-600 transition-colors">
           {listing.title}
         </h3>
-        <p className="text-slate-500 text-sm mt-2 line-clamp-2 h-10">
-          {listing.description}
-        </p>
         
         <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center text-slate-600 text-sm">
           <span className="flex items-center font-medium">
             <span className="w-1.5 h-1.5 bg-teal-500 rounded-full mr-2"></span>
-            {listing.area}
+            {listing.area} {listing.areaUnit || 'sq.ft'}
           </span>
           <span className="text-xs text-slate-400">
             {new Date(listing.postedAt).toLocaleDateString()}

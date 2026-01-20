@@ -1,3 +1,4 @@
+
 import { User, PropertyListing, ListingCategory } from '../types.ts';
 
 // This is a mock service that mimics Firebase behavior for the demo.
@@ -19,7 +20,8 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     location: 'Havelock Island (Swaraj Dweep)',
     category: ListingCategory.HOUSE_SALE,
     area: '2500 sq.ft',
-    imageUrl: 'https://picsum.photos/seed/andaman1/800/600',
+    areaUnit: 'sq.ft',
+    imageUrls: ['https://picsum.photos/seed/andaman1/800/600'],
     ownerId: 'user_456',
     ownerName: 'Rahul Sharma',
     contactNumber: '+91 94342 12345',
@@ -33,7 +35,8 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     location: 'Port Blair',
     category: ListingCategory.SHOP_RENT,
     area: '450 sq.ft',
-    imageUrl: 'https://picsum.photos/seed/andaman2/800/600',
+    areaUnit: 'sq.ft',
+    imageUrls: ['https://picsum.photos/seed/andaman2/800/600'],
     ownerId: 'user_123',
     ownerName: 'John Islander',
     contactNumber: '+91 98765 43210',
@@ -47,7 +50,8 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     location: 'Neil Island (Shaheed Dweep)',
     category: ListingCategory.LAND_SALE,
     area: '5000 sq.ft',
-    imageUrl: 'https://picsum.photos/seed/andaman3/800/600',
+    areaUnit: 'sq.ft',
+    imageUrls: ['https://picsum.photos/seed/andaman3/800/600'],
     ownerId: 'user_789',
     ownerName: 'Priya Das',
     contactNumber: '+91 99332 54321',

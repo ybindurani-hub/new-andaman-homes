@@ -2,7 +2,6 @@
 import React, { useState, useRef } from 'react';
 import { ListingCategory, PropertyListing, FurnishingStatus } from '../types.ts';
 import { ANDAMAN_LOCATIONS, Icons } from '../constants.tsx';
-import { enhanceDescription } from '../services/geminiService.ts';
 
 interface ListingFormProps {
   onSubmit: (listing: any) => void;
@@ -12,16 +11,18 @@ interface ListingFormProps {
 const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [showSpecs, setShowSpecs] = useState(false);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [showSpecs, setShowSpecs] = useState(true);
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     price: '',
     location: ANDAMAN_LOCATIONS[0],
+    customLocation: '',
     category: ListingCategory.HOUSE_RENT,
     area: '',
+    areaUnit: 'sq.ft' as 'sq.ft' | 'sq.mt',
     contactNumber: '',
     bhk: '2 BHK',
     bathrooms: '2',
@@ -30,31 +31,41 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    // Cast to File[] to ensure compatibility with reader.readAsDataURL
+    const files = Array.from(e.target.files || []) as File[];
+    if (imagePreviews.length + files.length > 10) {
+      alert("Maximum 10 images allowed.");
+      return;
+    }
+
+    files.forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreview(reader.result as string);
+        setImagePreviews(prev => [...prev, reader.result as string]);
       };
       reader.readAsDataURL(file);
-    }
+    });
   };
 
-  const handleEnhance = async () => {
-    if (!formData.description) return;
-    setLoading(true);
-    const enhanced = await enhanceDescription(formData.description);
-    setFormData(prev => ({ ...prev, description: enhanced }));
-    setLoading(false);
+  const removeImage = (index: number) => {
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const defaultAndamanImage = "https://images.unsplash.com/photo-1589136777351-fdc9c9c85f68?auto=format&fit=crop&q=80&w=1200";
+    if (imagePreviews.length === 0) {
+      alert("Please upload at least one image.");
+      return;
+    }
+    setLoading(true);
+    
+    const finalLocation = formData.location === 'Other' ? formData.customLocation : formData.location;
+
     onSubmit({
       ...formData,
+      location: finalLocation,
       price: Number(formData.price),
-      imageUrl: imagePreview || defaultAndamanImage
+      imageUrls: imagePreviews
     });
   };
 
@@ -63,32 +74,37 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
       <div className="bg-white rounded-[2.5rem] p-8 sm:p-12 shadow-2xl shadow-slate-200/50 border border-slate-100">
         <div className="text-center mb-10">
           <h2 className="text-3xl font-display font-bold text-slate-900 mb-2">List Your Property</h2>
-          <p className="text-slate-400 text-sm font-medium">Reach thousands of islanders looking for their next space.</p>
+          <p className="text-slate-400 text-sm font-medium">Reach islanders looking for their next home or shop.</p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-10">
-          {/* Image Upload Area */}
+          {/* Multi-Image Upload Area */}
           <div className="space-y-4">
-            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Featured Photograph</label>
-            <div 
-              onClick={() => fileInputRef.current?.click()}
-              className="relative h-72 w-full border-2 border-dashed border-slate-100 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer hover:border-teal-400 hover:bg-teal-50/20 transition-all overflow-hidden bg-slate-50/50 group"
-            >
-              {imagePreview ? (
-                <>
-                  <img src={imagePreview} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Preview" />
-                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="bg-white px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest text-slate-900">Change Photo</span>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-teal-500 mb-4 mx-auto border border-slate-100 group-hover:scale-110 transition-transform">
-                    <Icons.Camera />
-                  </div>
-                  <p className="text-slate-600 font-bold text-sm">Upload a high-quality property photo</p>
-                  <p className="text-slate-400 text-[10px] mt-1 font-medium uppercase tracking-tighter">Recommended: 1200x800px or higher</p>
+            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">
+              Photographs ({imagePreviews.length}/10)
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {imagePreviews.map((src, idx) => (
+                <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group">
+                  <img src={src} className="w-full h-full object-cover" alt="Preview" />
+                  <button 
+                    type="button"
+                    onClick={() => removeImage(idx)}
+                    className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Icons.Trash />
+                  </button>
                 </div>
+              ))}
+              {imagePreviews.length < 10 && (
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition-all text-slate-400"
+                >
+                  <Icons.Plus />
+                  <span className="text-[10px] font-bold uppercase mt-1">Add Image</span>
+                </button>
               )}
             </div>
             <input 
@@ -96,6 +112,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
               ref={fileInputRef} 
               className="hidden" 
               accept="image/*" 
+              multiple 
               onChange={handleImageChange}
             />
           </div>
@@ -104,7 +121,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
             <div className="space-y-3">
               <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Listing Type</label>
               <select 
-                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all"
+                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700 transition-all"
                 value={formData.category}
                 onChange={(e) => setFormData(p => ({ ...p, category: e.target.value as ListingCategory }))}
               >
@@ -115,123 +132,99 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
             </div>
 
             <div className="space-y-3">
-              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Precise Location</label>
-              <select 
-                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all"
-                value={formData.location}
-                onChange={(e) => setFormData(p => ({ ...p, location: e.target.value }))}
-              >
-                {ANDAMAN_LOCATIONS.map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
-              </select>
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Location</label>
+              <div className="space-y-2">
+                <select 
+                  className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700 transition-all"
+                  value={formData.location}
+                  onChange={(e) => setFormData(p => ({ ...p, location: e.target.value }))}
+                >
+                  {ANDAMAN_LOCATIONS.map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                  <option value="Other">Other (Type manually)</option>
+                </select>
+                {formData.location === 'Other' && (
+                  <input 
+                    type="text"
+                    placeholder="Enter specific locality..."
+                    className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700"
+                    value={formData.customLocation}
+                    onChange={(e) => setFormData(p => ({ ...p, customLocation: e.target.value }))}
+                    required
+                  />
+                )}
+              </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Catchy Title</label>
+            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Property Title</label>
             <input 
               required
               type="text" 
-              placeholder="e.g. Modern Ocean-facing Studio in Port Blair"
-              className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all placeholder:text-slate-300"
+              placeholder="e.g. Spacious 2BHK Near Aberdeen Bazaar"
+              className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700"
               value={formData.title}
               onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))}
             />
           </div>
 
-          {/* Collapsible Property Specifications Section */}
-          <div className="bg-slate-50/30 rounded-[2rem] border border-slate-100 overflow-hidden">
-            <button 
-              type="button"
-              onClick={() => setShowSpecs(!showSpecs)}
-              className="w-full flex items-center justify-between p-6 group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-2 bg-teal-50 text-teal-600 rounded-xl group-hover:bg-teal-600 group-hover:text-white transition-all">
-                  <Icons.Plus />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-[0.2em]">Technical Specifications</h3>
-                  <p className="text-[10px] text-slate-400 font-medium uppercase mt-0.5">BHK, Bathrooms, Parking & Furnishing</p>
-                </div>
+          {/* Simple Technical Specifications */}
+          <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4">Quick Details</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase">Configuration</label>
+                <select 
+                  className="w-full bg-white border border-slate-100 p-2 rounded-lg font-bold text-xs"
+                  value={formData.bhk}
+                  onChange={(e) => setFormData(p => ({ ...p, bhk: e.target.value }))}
+                >
+                  {['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK'].map(opt => <option key={opt}>{opt}</option>)}
+                </select>
               </div>
-              <div className={`transition-transform duration-300 ${showSpecs ? 'rotate-180' : ''}`}>
-                <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase">Bathrooms</label>
+                <select 
+                  className="w-full bg-white border border-slate-100 p-2 rounded-lg font-bold text-xs"
+                  value={formData.bathrooms}
+                  onChange={(e) => setFormData(p => ({ ...p, bathrooms: e.target.value }))}
+                >
+                  {['1', '2', '3', '4+'].map(opt => <option key={opt}>{opt}</option>)}
+                </select>
               </div>
-            </button>
-            
-            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showSpecs ? 'max-h-[500px] border-t border-slate-100 p-8 pt-2' : 'max-h-0'}`}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-4">
-                <div className="space-y-2">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-tighter">BHK Configuration</label>
-                  <select 
-                    className="w-full bg-white border border-slate-100 p-3 rounded-xl outline-none text-xs font-bold text-slate-700 shadow-sm"
-                    value={formData.bhk}
-                    onChange={(e) => setFormData(p => ({ ...p, bhk: e.target.value }))}
-                  >
-                    {['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK'].map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-tighter">Total Bathrooms</label>
-                  <select 
-                    className="w-full bg-white border border-slate-100 p-3 rounded-xl outline-none text-xs font-bold text-slate-700 shadow-sm"
-                    value={formData.bathrooms}
-                    onChange={(e) => setFormData(p => ({ ...p, bathrooms: e.target.value }))}
-                  >
-                    {['1', '2', '3', '4+'].map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-tighter">Car Parking</label>
-                  <select 
-                    className="w-full bg-white border border-slate-100 p-3 rounded-xl outline-none text-xs font-bold text-slate-700 shadow-sm"
-                    value={formData.parking}
-                    onChange={(e) => setFormData(p => ({ ...p, parking: e.target.value as 'Yes' | 'No' }))}
-                  >
-                    <option value="Yes">Available</option>
-                    <option value="No">Not Available</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-tighter">Furnishing Status</label>
-                  <select 
-                    className="w-full bg-white border border-slate-100 p-3 rounded-xl outline-none text-xs font-bold text-slate-700 shadow-sm"
-                    value={formData.furnishing}
-                    onChange={(e) => setFormData(p => ({ ...p, furnishing: e.target.value as FurnishingStatus }))}
-                  >
-                    {Object.values(FurnishingStatus).map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase">Parking</label>
+                <select 
+                  className="w-full bg-white border border-slate-100 p-2 rounded-lg font-bold text-xs"
+                  value={formData.parking}
+                  onChange={(e) => setFormData(p => ({ ...p, parking: e.target.value as 'Yes' | 'No' }))}
+                >
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase">Furnishing</label>
+                <select 
+                  className="w-full bg-white border border-slate-100 p-2 rounded-lg font-bold text-xs"
+                  value={formData.furnishing}
+                  onChange={(e) => setFormData(p => ({ ...p, furnishing: e.target.value as FurnishingStatus }))}
+                >
+                  {Object.values(FurnishingStatus).map(opt => <option key={opt}>{opt}</option>)}
+                </select>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Comprehensive Description</label>
-              <button 
-                type="button"
-                onClick={handleEnhance}
-                disabled={loading || !formData.description}
-                className="text-[10px] flex items-center gap-1.5 font-black text-teal-600 hover:text-white transition-all bg-teal-50 px-3 py-1.5 rounded-full border border-teal-100 hover:bg-teal-600 hover:shadow-lg disabled:opacity-50 uppercase tracking-widest"
-              >
-                {loading ? <span className="animate-spin text-sm">◌</span> : <Icons.Sparkles />}
-                {loading ? 'Processing...' : 'Enhance with AI'}
-              </button>
-            </div>
+            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Description</label>
             <textarea 
               required
               rows={4}
-              placeholder="Tell us more about the space, neighborhood, and unique features..."
-              className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium text-slate-700 transition-all placeholder:text-slate-300"
+              placeholder="Describe your property (features, amenities, neighborhood)..."
+              className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-medium text-slate-700"
               value={formData.description}
               onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
             />
@@ -240,59 +233,64 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
               <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Pricing (₹)</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
+              <input 
+                required
+                type="number" 
+                placeholder="Total Price or Rent"
+                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold"
+                value={formData.price}
+                onChange={(e) => setFormData(p => ({ ...p, price: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-3">
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Floor Area</label>
+              <div className="flex gap-2">
                 <input 
                   required
                   type="number" 
-                  placeholder="0.00"
-                  className="w-full bg-slate-50 border border-slate-100 p-4 pl-8 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all"
-                  value={formData.price}
-                  onChange={(e) => setFormData(p => ({ ...p, price: e.target.value }))}
+                  placeholder="Size"
+                  className="flex-grow bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold"
+                  value={formData.area}
+                  onChange={(e) => setFormData(p => ({ ...p, area: e.target.value }))}
                 />
+                <select 
+                  className="bg-slate-100 p-4 rounded-2xl font-bold text-xs outline-none"
+                  value={formData.areaUnit}
+                  onChange={(e) => setFormData(p => ({ ...p, areaUnit: e.target.value as 'sq.ft' | 'sq.mt' }))}
+                >
+                  <option value="sq.ft">SQFT</option>
+                  <option value="sq.mt">SQMT</option>
+                </select>
               </div>
-            </div>
-            <div className="space-y-3">
-              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Floor Area (sq.ft)</label>
-              <input 
-                required
-                type="text" 
-                placeholder="e.g. 1500"
-                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all"
-                value={formData.area}
-                onChange={(e) => setFormData(p => ({ ...p, area: e.target.value }))}
-              />
             </div>
           </div>
 
           <div className="space-y-3">
-            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Public Contact Number</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">+91</span>
-              <input 
-                required
-                type="tel" 
-                placeholder="10-digit mobile number"
-                className="w-full bg-slate-50 border border-slate-100 p-4 pl-14 rounded-2xl outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-slate-700 transition-all"
-                value={formData.contactNumber}
-                onChange={(e) => setFormData(p => ({ ...p, contactNumber: e.target.value }))}
-              />
-            </div>
+            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Contact Number</label>
+            <input 
+              required
+              type="tel" 
+              placeholder="10-digit mobile number"
+              className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold"
+              value={formData.contactNumber}
+              onChange={(e) => setFormData(p => ({ ...p, contactNumber: e.target.value }))}
+            />
           </div>
 
-          <div className="flex gap-4 pt-6 border-t border-slate-50">
+          <div className="flex gap-4 pt-6">
             <button 
               type="button"
               onClick={onCancel}
-              className="flex-1 bg-slate-50 border border-slate-100 py-4 rounded-2xl font-bold text-slate-600 hover:bg-slate-100 transition-all text-xs uppercase tracking-widest"
+              className="flex-1 bg-slate-100 py-4 rounded-2xl font-bold text-slate-600 hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
             >
-              Discard
+              Cancel
             </button>
             <button 
               type="submit"
-              className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-teal-600 hover:shadow-2xl hover:shadow-teal-600/30 transition-all text-xs uppercase tracking-widest active:scale-95"
+              disabled={loading}
+              className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-teal-600 transition-all text-xs uppercase tracking-widest disabled:opacity-50"
             >
-              Publish Listing
+              {loading ? 'Publishing...' : 'Publish Listing'}
             </button>
           </div>
         </form>

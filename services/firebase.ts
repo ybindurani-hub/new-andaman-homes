@@ -7,7 +7,6 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -17,9 +16,15 @@ import {
   addDoc, 
   getDocs, 
   query, 
-  orderBy 
+  orderBy,
+  onSnapshot,
+  doc,
+  setDoc,
+  serverTimestamp,
+  where,
+  limit
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { User, PropertyListing, ListingCategory } from '../types.ts';
+import { User, PropertyListing, ListingCategory, ChatMessage } from '../types.ts';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCrJp2FYJeJ5S4cbynYcqG7q15rWoPxcDE",
@@ -34,52 +39,6 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
-
-// Mock fallback data for when permissions are missing
-const FALLBACK_LISTINGS: PropertyListing[] = [
-  {
-    id: 'f1',
-    title: 'Modern Seaside Apartment',
-    description: 'Breathtaking ocean views in the heart of Port Blair. Fully furnished with high-end amenities.',
-    price: 45000,
-    location: 'Port Blair',
-    category: ListingCategory.HOUSE_RENT,
-    area: '1200 sq.ft',
-    imageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=1200',
-    ownerId: 'system',
-    ownerName: 'Admin',
-    contactNumber: '9999999999',
-    postedAt: Date.now()
-  },
-  {
-    id: 'f2',
-    title: 'Commercial Shop Space',
-    description: 'High traffic retail space near Aberdeen Bazaar. Perfect for new business ventures.',
-    price: 85000,
-    location: 'Port Blair',
-    category: ListingCategory.SHOP_RENT,
-    area: '600 sq.ft',
-    imageUrl: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&q=80&w=1200',
-    ownerId: 'system',
-    ownerName: 'Admin',
-    contactNumber: '9999999999',
-    postedAt: Date.now()
-  },
-  {
-    id: 'f3',
-    title: 'Prime Land Parcel',
-    description: 'Clear title flat land available in Neil Island. Near main market, ideal for home or resort development.',
-    price: 9500000,
-    location: 'Neil Island (Shaheed Dweep)',
-    category: ListingCategory.LAND_SALE,
-    area: '5000 sq.ft',
-    imageUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&q=80&w=1200',
-    ownerId: 'system',
-    ownerName: 'Admin',
-    contactNumber: '9999999999',
-    postedAt: Date.now() - 86400000
-  }
-];
 
 export const loginWithGoogle = async (): Promise<User> => {
   const result = await signInWithPopup(auth, googleProvider);
@@ -109,21 +68,6 @@ export const signInWithEmail = async (email: string, pass: string): Promise<User
   };
 };
 
-export const setupRecaptcha = (containerId: string) => {
-  if (typeof window !== 'undefined' && !(window as any).recaptchaVerifier) {
-    try {
-      const el = document.getElementById(containerId);
-      if (el) {
-        (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-          size: 'invisible'
-        });
-      }
-    } catch (e) {
-      console.error("Recaptcha error:", e);
-    }
-  }
-};
-
 export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
@@ -136,10 +80,10 @@ export const getListings = async (): Promise<PropertyListing[]> => {
     querySnapshot.forEach((doc) => {
       listings.push({ id: doc.id, ...doc.data() } as PropertyListing);
     });
-    return listings.length > 0 ? listings : FALLBACK_LISTINGS;
+    return listings;
   } catch (error) {
-    console.warn("Firestore access issues, using fallback listings:", error);
-    return FALLBACK_LISTINGS;
+    console.warn("Firestore access issues:", error);
+    return [];
   }
 };
 
@@ -154,8 +98,32 @@ export const addListing = async (listingData: any, user: User): Promise<Property
   return { id: docRef.id, ...listing } as PropertyListing;
 };
 
-export const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult> => {
-  const verifier = (window as any).recaptchaVerifier;
-  if (!verifier) throw new Error("Recaptcha not initialized. Ensure setupRecaptcha was called.");
+export const sendOTP = async (phoneNumber: string, verifier: any): Promise<ConfirmationResult> => {
   return await signInWithPhoneNumber(auth, phoneNumber, verifier);
+};
+
+// Chat Functions
+export const sendMessage = async (listingId: string, recipientId: string, sender: User, text: string) => {
+  const chatId = [sender.id, recipientId, listingId].sort().join('_');
+  const chatRef = collection(db, "chats", chatId, "messages");
+  
+  await addDoc(chatRef, {
+    senderId: sender.id,
+    senderName: sender.name,
+    text,
+    timestamp: Date.now()
+  });
+};
+
+export const listenToMessages = (listingId: string, recipientId: string, senderId: string, callback: (messages: ChatMessage[]) => void) => {
+  const chatId = [senderId, recipientId, listingId].sort().join('_');
+  const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
+  
+  return onSnapshot(q, (snapshot) => {
+    const messages: ChatMessage[] = [];
+    snapshot.forEach((doc) => {
+      messages.push({ id: doc.id, ...doc.data() } as ChatMessage);
+    });
+    callback(messages);
+  });
 };

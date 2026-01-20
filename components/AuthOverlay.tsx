@@ -1,6 +1,6 @@
-
-import React, { useState, useEffect } from 'react';
-import { signUpWithEmail, signInWithEmail, loginWithGoogle, sendOTP, setupRecaptcha } from '../services/firebase.ts';
+import React, { useState } from 'react';
+import { signUpWithEmail, signInWithEmail, loginWithGoogle, sendOTP } from '../services/firebase.ts';
+import { getRecaptchaVerifier } from '../services/recaptcha.ts';
 import { User } from '../types.ts';
 
 interface AuthOverlayProps {
@@ -19,12 +19,6 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => setupRecaptcha('recaptcha-container'), 500);
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -65,7 +59,9 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
     setLoading(true);
     setError('');
     try {
-      const res = await sendOTP('+91' + phone);
+      // Uses the stable verifier exported from recaptcha.ts
+      const verifier = getRecaptchaVerifier();
+      const res = await sendOTP('+91' + phone, verifier);
       setConfirmationResult(res);
     } catch (err: any) {
       setError(err.message);
@@ -96,7 +92,6 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div id="recaptcha-container"></div>
       <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
         <div className="relative h-24 bg-slate-900 flex items-center justify-center text-white overflow-hidden">
            <h2 className="text-xl font-display font-bold relative z-10">Andaman<span className="text-teal-400">Homes</span></h2>
@@ -118,7 +113,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
                       <span className="bg-slate-50 border border-slate-100 px-4 py-3 rounded-xl font-bold">+91</span>
                       <input 
                         type="tel" 
-                        placeholder="Enter 10-digit number"
+                        placeholder="10-digit number"
                         className="flex-grow bg-slate-50 border border-slate-100 px-4 py-3 rounded-xl outline-none focus:border-teal-500 font-bold"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
@@ -130,13 +125,13 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
                     disabled={loading || phone.length < 10}
                     className="w-full bg-teal-600 text-white py-3.5 rounded-xl font-bold hover:bg-teal-500 transition-all text-xs uppercase tracking-widest disabled:opacity-50"
                   >
-                    {loading ? 'Sending...' : 'Send Verification Code'}
+                    {loading ? 'Sending...' : 'Send OTP'}
                   </button>
                 </>
               ) : (
                 <>
                   <div className="space-y-2 text-center">
-                    <p className="text-xs text-slate-500 font-medium">Enter the 6-digit code sent to your phone</p>
+                    <p className="text-xs text-slate-500 font-medium">Enter 6-digit verification code</p>
                     <input 
                       type="text" 
                       placeholder="000000"
@@ -150,7 +145,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
                     disabled={loading || otp.length < 6}
                     className="w-full bg-teal-600 text-white py-3.5 rounded-xl font-bold hover:bg-teal-500 transition-all text-xs uppercase tracking-widest disabled:opacity-50"
                   >
-                    {loading ? 'Verifying...' : 'Verify & Continue'}
+                    {loading ? 'Verifying...' : 'Verify & Sign In'}
                   </button>
                 </>
               )}
@@ -177,9 +172,9 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
             </form>
           )}
 
-          <div className="my-6 flex items-center gap-4">
+          <div className="my-6 flex items-center gap-4 text-slate-200">
             <div className="flex-grow h-px bg-slate-100"></div>
-            <span className="text-[10px] font-black text-slate-300 uppercase">or continue with</span>
+            <span className="text-[10px] font-black uppercase text-slate-300">OR</span>
             <div className="flex-grow h-px bg-slate-100"></div>
           </div>
 
@@ -193,7 +188,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet })
           </div>
 
           <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
-            {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
+            {authMode === 'login' ? "New here?" : "Already joined?"}
             <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="ml-2 text-teal-600 hover:text-teal-700 underline">
               {authMode === 'login' ? 'Sign Up' : 'Sign In'}
             </button>
