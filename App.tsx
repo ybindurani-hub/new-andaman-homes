@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth, getListings, addListing, logout, getFavorites, toggleFavorite } from './services/firebase.ts';
+import { auth, getListings, addListing, logout, getFavorites, toggleFavorite, deleteListing } from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { User, PropertyListing, ViewState } from './types.ts';
 import Navbar from './components/Navbar.tsx';
@@ -75,6 +75,21 @@ const App: React.FC = () => {
     setFavorites(newFavs);
   };
 
+  const handleDeleteListing = async (e: React.MouseEvent, listingId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this listing?")) return;
+    
+    try {
+      await deleteListing(listingId);
+      setListings(prev => prev.filter(l => l.id !== listingId));
+      setSuccessMessage("Listing deleted successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error("Delete listing error:", error);
+      alert("Failed to delete listing. Please try again.");
+    }
+  };
+
   const filteredListings = listings.filter(l => {
     const title = (l.title || '').toLowerCase();
     const loc = (l.location || '').toLowerCase();
@@ -103,6 +118,8 @@ const App: React.FC = () => {
               listing={listing} 
               isFavorited={favorites.includes(listing.id)}
               onFavoriteToggle={handleFavoriteToggle}
+              isOwner={user?.id === listing.ownerId}
+              onDelete={handleDeleteListing}
               onClick={(l) => {
                 setSelectedListing(l);
                 setCurrentView('details');
@@ -175,6 +192,8 @@ const App: React.FC = () => {
               listing={listing} 
               isFavorited={favorites.includes(listing.id)}
               onFavoriteToggle={handleFavoriteToggle}
+              isOwner={user?.id === listing.ownerId}
+              onDelete={handleDeleteListing}
               onClick={(l) => {
                 setSelectedListing(l);
                 setCurrentView('details');
@@ -280,7 +299,17 @@ const App: React.FC = () => {
                   <div className="px-1 space-y-6">
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <h2 className="text-2xl font-black text-slate-900 leading-tight">{selectedListing.title}</h2>
+                        <div className="flex items-center justify-between w-full">
+                          <h2 className="text-2xl font-black text-slate-900 leading-tight">{selectedListing.title}</h2>
+                          {user?.id === selectedListing.ownerId && (
+                             <button 
+                               onClick={(e) => handleDeleteListing(e, selectedListing.id)}
+                               className="bg-red-50 text-red-500 p-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 hover:bg-red-100"
+                             >
+                               <Icons.Trash /> Delete
+                             </button>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 text-xs font-bold text-[#4CAF50] uppercase tracking-wide">
                           <Icons.Location />
                           {selectedListing.location}

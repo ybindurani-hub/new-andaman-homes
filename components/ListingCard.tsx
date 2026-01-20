@@ -7,13 +7,17 @@ interface ListingCardProps {
   onClick: (listing: PropertyListing) => void;
   isFavorited?: boolean;
   onFavoriteToggle?: (e: React.MouseEvent, listingId: string) => void;
+  isOwner?: boolean;
+  onDelete?: (e: React.MouseEvent, listingId: string) => void;
 }
 
 const ListingCard: React.FC<ListingCardProps> = ({ 
   listing, 
   onClick, 
   isFavorited, 
-  onFavoriteToggle 
+  onFavoriteToggle,
+  isOwner,
+  onDelete
 }) => {
   const isRent = listing.category.toLowerCase().includes('rent');
   
@@ -35,7 +39,7 @@ const ListingCard: React.FC<ListingCardProps> = ({
   return (
     <div 
       onClick={() => onClick(listing)}
-      className="bg-white rounded-[1rem] overflow-hidden cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100/60 flex flex-col h-full"
+      className="bg-white rounded-[1rem] overflow-hidden cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100/60 flex flex-col h-full relative"
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden">
         <img 
@@ -44,15 +48,30 @@ const ListingCard: React.FC<ListingCardProps> = ({
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
         />
         
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onFavoriteToggle?.(e, listing.id);
-          }}
-          className="absolute top-2 right-2 bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg transition-all active:scale-90 z-10"
-        >
-          <Icons.Heart filled={isFavorited} />
-        </button>
+        <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onFavoriteToggle?.(e, listing.id);
+            }}
+            className="bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg transition-all active:scale-90"
+          >
+            <Icons.Heart filled={isFavorited} />
+          </button>
+
+          {isOwner && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete?.(e, listing.id);
+              }}
+              className="bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg transition-all active:scale-90 text-red-500 hover:bg-red-50"
+              title="Delete Listing"
+            >
+              <Icons.Trash />
+            </button>
+          )}
+        </div>
 
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           <div className="bg-[#4CAF50] text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider shadow-sm w-fit">
