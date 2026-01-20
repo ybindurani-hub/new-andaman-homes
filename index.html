@@ -23,9 +23,11 @@
     </style>
     <script>
         // Polyfill for process.env to prevent crashes in the browser
-        // We only set it if it's not already provided by the environment
-        window.process = window.process || {};
-        window.process.env = window.process.env || {};
+        window.process = window.process || { env: {} };
+        if (typeof window.process.env !== 'object') {
+            window.process.env = {};
+        }
+        // Ensure API_KEY is at least a string to avoid undefined checks failing
         if (!window.process.env.API_KEY) {
             window.process.env.API_KEY = "";
         }
@@ -37,6 +39,16 @@
             if (display) {
                 display.style.display = 'block';
                 display.innerHTML += `<div><strong>Runtime Error:</strong> ${e.message}<br><small>${e.filename}:${e.lineno}</small></div><hr style="opacity:0.1;margin:10px 0;">`;
+            }
+        });
+        
+        // Catch unhandled promise rejections (often from module loading failures)
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled Rejection:', e.reason);
+            const display = document.getElementById('error-display');
+            if (display) {
+                display.style.display = 'block';
+                display.innerHTML += `<div><strong>Unhandled Rejection:</strong> ${e.reason}<br></div><hr style="opacity:0.1;margin:10px 0;">`;
             }
         });
     </script>

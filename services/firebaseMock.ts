@@ -1,5 +1,4 @@
-
-import { User, PropertyListing, ListingCategory } from '../types';
+import { User, PropertyListing, ListingCategory } from '../types.ts';
 
 // This is a mock service that mimics Firebase behavior for the demo.
 // In a real app, you would use 'firebase/app', 'firebase/auth', and 'firebase/firestore'.
