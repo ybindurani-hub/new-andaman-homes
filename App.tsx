@@ -269,7 +269,11 @@ const App: React.FC = () => {
                 
                 <div className="space-y-6">
                   <div className="aspect-[4/3] rounded-[2rem] overflow-hidden shadow-xl relative bg-slate-100">
-                    <img src={selectedListing.imageUrls[0]} className="w-full h-full object-cover" alt="" />
+                    <img 
+                      src={selectedListing.imageUrls?.[0] || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=1200'} 
+                      className="w-full h-full object-cover" 
+                      alt={selectedListing.title} 
+                    />
                     <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full font-black text-[9px] uppercase shadow-sm">{selectedListing.category}</div>
                   </div>
 
