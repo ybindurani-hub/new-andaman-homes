@@ -12,6 +12,25 @@ export enum FurnishingStatus {
   FULLY_FURNISHED = 'Fully Furnished'
 }
 
+export enum ListingStatus {
+  ACTIVE = 'Active',
+  SOLD = 'Sold',
+  RENTED = 'Rented',
+  BOOKED = 'Booked'
+}
+
+export enum PostedBy {
+  OWNER = 'Owner',
+  BROKER = 'Broker'
+}
+
+export enum ParkingOption {
+  BIKE = 'Bike',
+  CAR = 'Car',
+  BOTH = 'Both',
+  NONE = 'None'
+}
+
 export interface PropertyListing {
   id: string;
   title: string;
@@ -21,15 +40,18 @@ export interface PropertyListing {
   category: ListingCategory;
   area: string;
   areaUnit: 'sq.ft' | 'sq.mt';
-  imageUrls: string[]; // Changed to array for multiple images
+  imageUrls: string[];
   ownerId: string;
   ownerName: string;
   contactNumber: string;
   postedAt: number;
   bhk?: string;
   bathrooms?: string;
-  parking?: 'Yes' | 'No';
+  parking: ParkingOption;
   furnishing?: FurnishingStatus;
+  floor: string;
+  postedBy: PostedBy;
+  status: ListingStatus;
 }
 
 export interface User {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { PropertyListing } from '../types.ts';
+import { PropertyListing, ListingStatus } from '../types.ts';
 import { Icons } from '../constants.tsx';
 
 interface ListingCardProps {
@@ -17,10 +17,16 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
     }).format(price);
   };
 
-  // Safe fallback for images
   const mainImage = listing.imageUrls && listing.imageUrls.length > 0 
     ? listing.imageUrls[0] 
     : (listing as any).imageUrl || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=1200';
+
+  const statusColors = {
+    [ListingStatus.ACTIVE]: 'bg-white/90 text-slate-700',
+    [ListingStatus.SOLD]: 'bg-red-500 text-white',
+    [ListingStatus.RENTED]: 'bg-blue-500 text-white',
+    [ListingStatus.BOOKED]: 'bg-amber-500 text-white',
+  };
 
   return (
     <div 
@@ -33,8 +39,15 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onClick }) => {
           alt={listing.title}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
         />
-        <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm">
-          {listing.category}
+        <div className="absolute top-3 left-3 flex flex-col gap-2 items-start">
+          <div className="bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-slate-700 shadow-sm">
+            {listing.category}
+          </div>
+          {listing.status !== ListingStatus.ACTIVE && (
+            <div className={`${statusColors[listing.status]} backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg`}>
+              {listing.status}
+            </div>
+          )}
         </div>
         <div className="absolute bottom-3 left-3 bg-teal-600 text-white px-3 py-1 rounded-lg text-lg font-bold shadow-lg">
           {formatPrice(listing.price)}{!isSale && <span className="text-xs font-normal"> /mo</span>}

@@ -19,12 +19,14 @@ import {
   orderBy,
   onSnapshot,
   doc,
+  deleteDoc,
+  updateDoc,
   setDoc,
   serverTimestamp,
   where,
   limit
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { User, PropertyListing, ListingCategory, ChatMessage } from '../types.ts';
+import { User, PropertyListing, ListingCategory, ChatMessage, ListingStatus } from '../types.ts';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCrJp2FYJeJ5S4cbynYcqG7q15rWoPxcDE",
@@ -90,12 +92,23 @@ export const getListings = async (): Promise<PropertyListing[]> => {
 export const addListing = async (listingData: any, user: User): Promise<PropertyListing> => {
   const listing = {
     ...listingData,
+    status: ListingStatus.ACTIVE,
     ownerId: user.id,
     ownerName: user.name,
     postedAt: Date.now()
   };
   const docRef = await addDoc(collection(db, "listings"), listing);
   return { id: docRef.id, ...listing } as PropertyListing;
+};
+
+export const deleteListing = async (listingId: string) => {
+  const listingRef = doc(db, "listings", listingId);
+  await deleteDoc(listingRef);
+};
+
+export const updateListingStatus = async (listingId: string, status: ListingStatus) => {
+  const listingRef = doc(db, "listings", listingId);
+  await updateDoc(listingRef, { status });
 };
 
 export const sendOTP = async (phoneNumber: string, verifier: any): Promise<ConfirmationResult> => {

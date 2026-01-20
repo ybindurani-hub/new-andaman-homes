@@ -1,6 +1,5 @@
-
 import React, { useState, useRef } from 'react';
-import { ListingCategory, PropertyListing, FurnishingStatus } from '../types.ts';
+import { ListingCategory, PropertyListing, FurnishingStatus, PostedBy, ParkingOption, ListingStatus } from '../types.ts';
 import { ANDAMAN_LOCATIONS, Icons } from '../constants.tsx';
 
 interface ListingFormProps {
@@ -12,7 +11,6 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [showSpecs, setShowSpecs] = useState(true);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -26,12 +24,13 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
     contactNumber: '',
     bhk: '2 BHK',
     bathrooms: '2',
-    parking: 'Yes' as 'Yes' | 'No',
+    parking: ParkingOption.NONE,
     furnishing: FurnishingStatus.SEMI_FURNISHED,
+    floor: 'Ground',
+    postedBy: PostedBy.OWNER,
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Cast to File[] to ensure compatibility with reader.readAsDataURL
     const files = Array.from(e.target.files || []) as File[];
     if (imagePreviews.length + files.length > 10) {
       alert("Maximum 10 images allowed.");
@@ -65,7 +64,8 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
       ...formData,
       location: finalLocation,
       price: Number(formData.price),
-      imageUrls: imagePreviews
+      imageUrls: imagePreviews,
+      status: ListingStatus.ACTIVE
     });
   };
 
@@ -132,6 +132,20 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
             </div>
 
             <div className="space-y-3">
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Posted By</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700 transition-all"
+                value={formData.postedBy}
+                onChange={(e) => setFormData(p => ({ ...p, postedBy: e.target.value as PostedBy }))}
+              >
+                <option value={PostedBy.OWNER}>Owner</option>
+                <option value={PostedBy.BROKER}>Broker</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3">
               <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Location</label>
               <div className="space-y-2">
                 <select 
@@ -156,6 +170,19 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
                 )}
               </div>
             </div>
+
+            <div className="space-y-3">
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">Floor</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl outline-none focus:border-teal-500 font-bold text-slate-700 transition-all"
+                value={formData.floor}
+                onChange={(e) => setFormData(p => ({ ...p, floor: e.target.value }))}
+              >
+                {['Ground', '1st', '2nd', '3rd', '4th', 'More'].map(f => (
+                  <option key={f} value={f}>{f} Floor</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -170,7 +197,6 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
             />
           </div>
 
-          {/* Simple Technical Specifications */}
           <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4">Quick Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -199,10 +225,9 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
                 <select 
                   className="w-full bg-white border border-slate-100 p-2 rounded-lg font-bold text-xs"
                   value={formData.parking}
-                  onChange={(e) => setFormData(p => ({ ...p, parking: e.target.value as 'Yes' | 'No' }))}
+                  onChange={(e) => setFormData(p => ({ ...p, parking: e.target.value as ParkingOption }))}
                 >
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
+                  {Object.values(ParkingOption).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
               <div className="space-y-1">

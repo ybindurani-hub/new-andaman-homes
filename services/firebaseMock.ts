@@ -1,5 +1,5 @@
 
-import { User, PropertyListing, ListingCategory } from '../types.ts';
+import { User, PropertyListing, ListingCategory, ParkingOption, PostedBy, ListingStatus } from '../types.ts';
 
 // This is a mock service that mimics Firebase behavior for the demo.
 // In a real app, you would use 'firebase/app', 'firebase/auth', and 'firebase/firestore'.
@@ -25,7 +25,12 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     ownerId: 'user_456',
     ownerName: 'Rahul Sharma',
     contactNumber: '+91 94342 12345',
-    postedAt: Date.now() - 86400000
+    postedAt: Date.now() - 86400000,
+    // Fix: Added missing properties required by PropertyListing interface
+    parking: ParkingOption.BOTH,
+    floor: 'Ground',
+    postedBy: PostedBy.OWNER,
+    status: ListingStatus.ACTIVE
   },
   {
     id: '2',
@@ -40,7 +45,12 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     ownerId: 'user_123',
     ownerName: 'John Islander',
     contactNumber: '+91 98765 43210',
-    postedAt: Date.now() - 172800000
+    postedAt: Date.now() - 172800000,
+    // Fix: Added missing properties required by PropertyListing interface
+    parking: ParkingOption.NONE,
+    floor: 'Ground',
+    postedBy: PostedBy.OWNER,
+    status: ListingStatus.ACTIVE
   },
   {
     id: '3',
@@ -55,7 +65,12 @@ const INITIAL_LISTINGS: PropertyListing[] = [
     ownerId: 'user_789',
     ownerName: 'Priya Das',
     contactNumber: '+91 99332 54321',
-    postedAt: Date.now() - 259200000
+    postedAt: Date.now() - 259200000,
+    // Fix: Added missing properties required by PropertyListing interface
+    parking: ParkingOption.NONE,
+    floor: 'N/A',
+    postedBy: PostedBy.BROKER,
+    status: ListingStatus.ACTIVE
   }
 ];
 
