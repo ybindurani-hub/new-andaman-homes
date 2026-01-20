@@ -1,0 +1,7 @@
+{
+  "name": "Andaman Homes",
+  "description": "A premium real estate marketplace for the Andaman Islands, specializing in house and shop rentals, sales, and land transactions.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
