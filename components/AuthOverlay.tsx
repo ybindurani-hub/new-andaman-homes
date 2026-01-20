@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { signUpWithEmail, signInWithEmail, loginWithGoogle, sendOTP, setupRecaptcha } from '../services/firebase';
-import { User } from '../types';
+import { signUpWithEmail, signInWithEmail, loginWithGoogle, sendOTP, setupRecaptcha } from '../services/firebase.ts';
+import { User } from '../types.ts';
 
 interface AuthOverlayProps {
   isOpen: boolean;
