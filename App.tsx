@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [filterType, setFilterType] = useState<'ALL' | 'RENT' | 'SALE'>('ALL');
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -86,7 +87,16 @@ const App: React.FC = () => {
 
   const renderHome = () => (
     <div className="pb-32 bg-white min-h-screen">
-      {/* Search Bar - Matching reference image style */}
+      {successMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top duration-300">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-2">
+            <div className="bg-white/20 p-1 rounded-full"><Icons.Plus /></div>
+            {successMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Search Bar */}
       <div className="max-w-7xl mx-auto px-5 mt-4">
         <div className="relative">
           <div className="absolute inset-y-0 left-5 flex items-center text-[#B0B8C1] pointer-events-none">
@@ -102,7 +112,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter Chips - Matching reference image style */}
+      {/* Filter Chips */}
       <div className="max-w-7xl mx-auto px-5 mt-8 flex gap-3 overflow-x-auto no-scrollbar">
         {(['ALL', 'RENT', 'SALE'] as const).map(type => (
           <button
@@ -119,7 +129,7 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      {/* Grid - 2 columns for mobile as per reference image */}
+      {/* Grid */}
       <div className="max-w-7xl mx-auto px-5 mt-10">
         <div className="grid grid-cols-2 gap-4">
           {filteredListings.map(listing => (
@@ -230,16 +240,15 @@ const App: React.FC = () => {
                 return;
               }
               try {
-                setLoading(true);
                 const newListing = await addListing(data, user);
-                // Optimistically update the list locally
+                // Immediately update locally
                 setListings(prev => [newListing, ...prev]);
                 setCurrentView('home');
-                setLoading(false);
+                setSuccessMessage("Listing published successfully!");
+                setTimeout(() => setSuccessMessage(null), 3000);
               } catch (e) {
-                setLoading(false);
                 console.error("Post listing error:", e);
-                alert("Failed to post ad. Please try again or check your connection.");
+                throw e; // Let ListingForm handle the error UI
               }
             }} 
             onCancel={() => setCurrentView('home')} 
