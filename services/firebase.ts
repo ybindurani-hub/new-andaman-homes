@@ -1,4 +1,3 @@
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
   getAuth, 
@@ -110,7 +109,6 @@ export const signInWithEmail = async (email: string, pass: string): Promise<User
   };
 };
 
-// Fix for truncated setupRecaptcha function
 export const setupRecaptcha = (containerId: string) => {
   if (typeof window !== 'undefined' && !(window as any).recaptchaVerifier) {
     try {
@@ -126,12 +124,10 @@ export const setupRecaptcha = (containerId: string) => {
   }
 };
 
-// Added missing logout export
 export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
 
-// Added missing getListings export with fallback logic
 export const getListings = async (): Promise<PropertyListing[]> => {
   try {
     const q = query(collection(db, "listings"), orderBy("postedAt", "desc"));
@@ -142,12 +138,11 @@ export const getListings = async (): Promise<PropertyListing[]> => {
     });
     return listings.length > 0 ? listings : FALLBACK_LISTINGS;
   } catch (error) {
-    console.error("Firestore get error:", error);
+    console.warn("Firestore access issues, using fallback listings:", error);
     return FALLBACK_LISTINGS;
   }
 };
 
-// Added missing addListing export
 export const addListing = async (listingData: any, user: User): Promise<PropertyListing> => {
   const listing = {
     ...listingData,
@@ -159,7 +154,6 @@ export const addListing = async (listingData: any, user: User): Promise<Property
   return { id: docRef.id, ...listing } as PropertyListing;
 };
 
-// Added missing sendOTP export
 export const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult> => {
   const verifier = (window as any).recaptchaVerifier;
   if (!verifier) throw new Error("Recaptcha not initialized. Ensure setupRecaptcha was called.");
