@@ -35,13 +35,13 @@ const ListingCard: React.FC<ListingCardProps> = ({
   return (
     <div 
       onClick={() => onClick(listing)}
-      className="bg-white rounded-2xl overflow-hidden cursor-pointer group shadow-sm border border-slate-100/50"
+      className="bg-white rounded-[1rem] overflow-hidden cursor-pointer group shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100/60 flex flex-col h-full"
     >
-      <div className="relative aspect-square m-1 rounded-xl overflow-hidden">
+      <div className="relative aspect-[4/3] w-full overflow-hidden">
         <img 
           src={mainImage} 
           alt={listing.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
         />
         
         <button 
@@ -49,42 +49,52 @@ const ListingCard: React.FC<ListingCardProps> = ({
             e.stopPropagation();
             onFavoriteToggle?.(e, listing.id);
           }}
-          className="absolute top-2.5 right-2.5 bg-white p-1.5 rounded-full shadow-md transition-all active:scale-90"
+          className="absolute top-2 right-2 bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg transition-all active:scale-90 z-10"
         >
           <Icons.Heart filled={isFavorited} />
         </button>
 
-        <div className="absolute bottom-2 left-2 bg-[#FFD740] text-black px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
-          {isRent ? 'FOR RENT' : 'FOR SALE'}
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
+          <div className="bg-[#4CAF50] text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider shadow-sm w-fit">
+            {listing.postedBy}
+          </div>
+          <div className="bg-slate-900/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider w-fit">
+            {isRent ? 'RENT' : 'SALE'}
+          </div>
         </div>
       </div>
       
-      <div className="px-3 pb-4 pt-1 space-y-1">
-        <div className="text-xl font-black text-slate-900 leading-tight">
-          {formatPrice(listing.price)}
-        </div>
-        
-        <div className="text-[11px] font-medium text-slate-500 line-clamp-1">
-          {listing.title}
-        </div>
-        
-        <div className="flex flex-wrap gap-2 pt-1">
-          {listing.bhk && (
-            <span className="bg-[#F8F9FA] text-[#9099A3] text-[10px] font-bold px-2 py-1 rounded-md border border-slate-100">
-              {listing.bhk}
+      <div className="p-3 flex flex-col flex-grow justify-between">
+        <div className="space-y-1">
+          <div className="flex items-baseline gap-1">
+            <span className="text-base font-black text-slate-900 leading-tight">
+              {formatPrice(listing.price)}
             </span>
-          )}
-          <span className="bg-[#F8F9FA] text-[#9099A3] text-[10px] font-bold px-2 py-1 rounded-md border border-slate-100 uppercase">
-            {listing.area} {listing.areaUnit}
-          </span>
+            {isRent && <span className="text-[9px] font-bold text-slate-400">/mo</span>}
+          </div>
+          
+          <div className="text-[10px] font-bold text-slate-600 line-clamp-1 leading-snug">
+            {listing.title}
+          </div>
+          
+          <div className="flex flex-wrap gap-1 pt-1">
+            {listing.bhk && (
+              <div className="bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{listing.bhk}</span>
+              </div>
+            )}
+            <div className="bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{listing.area} {listing.areaUnit}</span>
+            </div>
+          </div>
         </div>
         
-        <div className="flex justify-between items-center pt-3 border-t border-slate-50">
-          <div className="flex items-center gap-1 text-[10px] font-bold text-[#A0A8B0] uppercase">
-            <div className="text-green-500/60"><Icons.Location /></div>
-            <span>{listing.location.split(' ')[0]}</span>
+        <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-50">
+          <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+            <div className="text-[#4CAF50] scale-75 opacity-70"><Icons.Location /></div>
+            <span className="truncate max-w-[70px]">{listing.location.split(' ')[0]}</span>
           </div>
-          <div className="text-[10px] font-bold text-[#A0A8B0] uppercase">
+          <div className="text-[8px] font-black text-slate-300 uppercase">
             {formattedDate}
           </div>
         </div>
