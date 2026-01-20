@@ -22,11 +22,9 @@ import {
   deleteDoc,
   updateDoc,
   setDoc,
-  serverTimestamp,
-  where,
-  limit
+  where
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { User, PropertyListing, ListingCategory, ChatMessage, ListingStatus } from '../types.ts';
+import { User, PropertyListing, ChatMessage, ListingStatus } from '../types.ts';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCrJp2FYJeJ5S4cbynYcqG7q15rWoPxcDE",
@@ -42,18 +40,24 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// LOCAL STORAGE FALLBACK KEYS
 const STORAGE_KEY = 'andaman_homes_local_listings';
 const FAVORITES_KEY = 'andaman_homes_favorites';
 
 export const loginWithGoogle = async (): Promise<User> => {
-  const result = await signInWithPopup(auth, googleProvider);
-  return {
-    id: result.user.uid,
-    name: result.user.displayName || 'User',
-    email: result.user.email || '',
-    photoURL: result.user.photoURL || undefined
-  };
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return {
+      id: result.user.uid,
+      name: result.user.displayName || 'User',
+      email: result.user.email || '',
+      photoURL: result.user.photoURL || undefined
+    };
+  } catch (error: any) {
+    if (error.code === 'auth/unauthorized-domain') {
+      throw new Error("This domain is not authorized. Please add it to Authorized Domains in Firebase Console.");
+    }
+    throw error;
+  }
 };
 
 export const signUpWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
@@ -88,11 +92,9 @@ export const getListings = async (): Promise<PropertyListing[]> => {
     querySnapshot.forEach((doc) => {
       listings.push({ id: doc.id, ...doc.data() } as PropertyListing);
     });
-    
-    // Combine cloud and local listings for the user
     return [...localListings, ...listings];
   } catch (error) {
-    console.warn("Firestore fetch failed, returning local listings only:", error);
+    console.warn("Firestore fetch failed:", error);
     return localListings;
   }
 };
@@ -110,14 +112,11 @@ export const addListing = async (listingData: any, user: User): Promise<Property
     const docRef = await addDoc(collection(db, "listings"), listing);
     return { id: docRef.id, ...listing } as PropertyListing;
   } catch (error) {
-    console.warn("Firestore save failed, falling back to LocalStorage:", error);
-    
-    // Save to local storage so user doesn't lose data and sees it in UI
+    console.warn("Firestore save failed, using local fallback:", error);
     const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     const localListingWithId = { ...listing, id: 'local_' + Date.now() };
     localListings.unshift(localListingWithId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(localListings));
-    
     return localListingWithId as PropertyListing;
   }
 };
@@ -129,7 +128,6 @@ export const deleteListing = async (listingId: string) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
     return;
   }
-
   try {
     const listingRef = doc(db, "listings", listingId);
     await deleteDoc(listingRef);
@@ -146,7 +144,6 @@ export const updateListingStatus = async (listingId: string, status: ListingStat
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     return;
   }
-
   try {
     const listingRef = doc(db, "listings", listingId);
     await updateDoc(listingRef, { status });
@@ -160,12 +157,10 @@ export const sendOTP = async (phoneNumber: string, verifier: any): Promise<Confi
   return await signInWithPhoneNumber(auth, phoneNumber, verifier);
 };
 
-// Chat Functions
 export const sendMessage = async (listingId: string, recipientId: string, sender: User, text: string) => {
   try {
     const chatId = [sender.id, recipientId, listingId].sort().join('_');
     const chatRef = collection(db, "chats", chatId, "messages");
-    
     await addDoc(chatRef, {
       senderId: sender.id,
       senderName: sender.name,
@@ -180,7 +175,6 @@ export const sendMessage = async (listingId: string, recipientId: string, sender
 export const listenToMessages = (listingId: string, recipientId: string, senderId: string, callback: (messages: ChatMessage[]) => void) => {
   const chatId = [senderId, recipientId, listingId].sort().join('_');
   const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
-  
   return onSnapshot(q, (snapshot) => {
     const messages: ChatMessage[] = [];
     snapshot.forEach((doc) => {
@@ -192,28 +186,22 @@ export const listenToMessages = (listingId: string, recipientId: string, senderI
   });
 };
 
-// Favorite Functions
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
   const favorites = JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
   const index = favorites.indexOf(listingId);
   let newFavorites: string[];
-
   if (index === -1) {
     newFavorites = [...favorites, listingId];
   } else {
     newFavorites = favorites.filter((id: string) => id !== listingId);
   }
-
   localStorage.setItem(`${FAVORITES_KEY}_${userId}`, JSON.stringify(newFavorites));
-  
-  // Try cloud sync if possible
   try {
     const userRef = doc(db, "users", userId);
     await setDoc(userRef, { favorites: newFavorites }, { merge: true });
   } catch (e) {
     console.warn("Cloud favorite sync failed:", e);
   }
-
   return newFavorites;
 };
 
@@ -230,6 +218,5 @@ export const getFavorites = async (userId: string): Promise<string[]> => {
   } catch (e) {
     console.warn("Cloud favorites fetch failed:", e);
   }
-
   return JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
 };

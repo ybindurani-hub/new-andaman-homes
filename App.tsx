@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { auth, getListings, addListing, logout, deleteListing, updateListingStatus, getFavorites, toggleFavorite } from './services/firebase.ts';
+import { auth, getListings, addListing, logout, getFavorites, toggleFavorite } from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { User, PropertyListing, ViewState, ListingCategory, ListingStatus } from './types.ts';
+import { User, PropertyListing, ViewState } from './types.ts';
 import Navbar from './components/Navbar.tsx';
 import ListingCard from './components/ListingCard.tsx';
 import ListingForm from './components/ListingForm.tsx';
@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'RENT' | 'SALE'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -31,11 +32,17 @@ const App: React.FC = () => {
           photoURL: firebaseUser.photoURL || undefined
         };
         setUser(userData);
-        const favs = await getFavorites(userData.id);
-        setFavorites(favs);
+        try {
+          const favs = await getFavorites(userData.id);
+          setFavorites(favs);
+        } catch (e) { console.error(e); }
       } else {
         setUser(null);
         setFavorites([]);
+      }
+    }, (error) => {
+      if (error.message.includes('unauthorized-domain')) {
+        setAuthError("Auth Error: This domain is not authorized in Firebase Console. Please add it to 'Authorized Domains' in your Firebase Auth settings.");
       }
     });
     return () => unsubscribe();
@@ -78,24 +85,24 @@ const App: React.FC = () => {
   });
 
   const renderHome = () => (
-    <div className="pb-24">
+    <div className="pb-32 bg-white min-h-screen">
       {/* Ad Banner Placeholder */}
-      <div className="max-w-7xl mx-auto px-4 mt-4">
-        <div className="bg-[#F1F8E9] border border-green-50 py-3 rounded-lg text-center">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Google AdMob Banner (Top)</span>
+      <div className="max-w-7xl mx-auto px-5 mt-2">
+        <div className="bg-[#F8FBF8] border border-slate-50 py-4 rounded-xl text-center">
+          <span className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] opacity-80">GOOGLE ADMOB BANNER (TOP)</span>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="relative group">
-          <div className="absolute inset-y-0 left-4 flex items-center text-slate-300 pointer-events-none group-focus-within:text-green-500 transition-colors">
+      <div className="max-w-7xl mx-auto px-5 mt-6">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-5 flex items-center text-slate-300 pointer-events-none">
             <Icons.Search />
           </div>
           <input 
             type="text" 
             placeholder="Search Port Blair, Havelock, etc..." 
-            className="w-full bg-white border border-slate-100 rounded-full py-3.5 pl-12 pr-6 outline-none shadow-sm focus:border-green-200 focus:shadow-md transition-all font-medium text-slate-700 text-sm"
+            className="w-full bg-white border border-slate-100 rounded-full py-4 pl-14 pr-6 outline-none shadow-[0_4px_12px_rgba(0,0,0,0.03)] focus:border-green-100 transition-all font-medium text-slate-700 text-lg placeholder:text-slate-300"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -103,15 +110,15 @@ const App: React.FC = () => {
       </div>
 
       {/* Filter Chips */}
-      <div className="max-w-7xl mx-auto px-4 mt-6 flex gap-3 overflow-x-auto no-scrollbar">
+      <div className="max-w-7xl mx-auto px-5 mt-8 flex gap-3 overflow-x-auto no-scrollbar">
         {(['ALL', 'RENT', 'SALE'] as const).map(type => (
           <button
             key={type}
             onClick={() => setFilterType(type)}
-            className={`px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+            className={`px-10 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
               filterType === type 
                 ? 'bg-[#4CAF50] text-white shadow-lg shadow-green-500/20' 
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                : 'bg-[#F1F3F5] text-slate-400 hover:bg-slate-200'
             }`}
           >
             {type}
@@ -120,7 +127,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Grid */}
-      <div className="max-w-7xl mx-auto px-4 mt-8">
+      <div className="max-w-7xl mx-auto px-5 mt-10">
         <div className="grid grid-cols-2 gap-4">
           {filteredListings.map(listing => (
             <ListingCard 
@@ -138,7 +145,7 @@ const App: React.FC = () => {
         
         {filteredListings.length === 0 && !loading && (
           <div className="py-20 text-center">
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">No matching results found</p>
+            <p className="text-slate-300 font-bold text-xs uppercase tracking-widest">No matching results found</p>
           </div>
         )}
       </div>
@@ -146,39 +153,40 @@ const App: React.FC = () => {
   );
 
   const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 py-2 z-[100] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-      <div className="max-w-lg mx-auto flex items-end justify-between relative h-14">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-50 px-4 pt-3 pb-6 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+      <div className="max-w-lg mx-auto flex items-end justify-between relative h-16">
         <button 
           onClick={() => setCurrentView('home')}
-          className="flex flex-col items-center flex-1 transition-all active:scale-90"
+          className="flex flex-col items-center flex-1 group"
         >
-          <Icons.Home active={currentView === 'home'} />
-          <span className={`text-[9px] font-bold mt-1 ${currentView === 'home' ? 'text-green-600' : 'text-slate-400'}`}>Home</span>
+          <div className="mb-1"><Icons.Home active={currentView === 'home'} /></div>
+          <span className={`text-[11px] font-bold ${currentView === 'home' ? 'text-green-600' : 'text-slate-400 opacity-60'}`}>Home</span>
         </button>
         
         <button 
           onClick={() => {
             if (!user) setIsAuthOpen(true);
-            else setCurrentView('profile'); // Show favorites in profile or create separate view
+            else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 transition-all active:scale-90"
+          className="flex flex-col items-center flex-1 group"
         >
-          <Icons.Heart filled={false} />
-          <span className="text-[9px] font-bold mt-1 text-slate-400">Saved</span>
+          <div className="mb-1"><Icons.Heart filled={false} /></div>
+          <span className="text-[11px] font-bold text-slate-400 opacity-60">Saved</span>
         </button>
 
-        <div className="flex-1 flex justify-center">
-          <button 
-            onClick={() => {
-              if (!user) setIsAuthOpen(true);
-              else setCurrentView('post');
-            }}
-            className="absolute -top-10 bg-white p-2 rounded-full shadow-xl"
-          >
-            <div className="w-16 h-16 bg-[#4CAF50] rounded-full flex flex-col items-center justify-center text-white shadow-lg shadow-green-500/30 hover:bg-green-600 transition-all">
-              <span className="text-[10px] font-black uppercase tracking-tighter">Sell</span>
-            </div>
-          </button>
+        <div className="flex-1 flex justify-center pb-2">
+          <div className="absolute -top-12 bg-white p-2.5 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.1)]">
+            <button 
+              onClick={() => {
+                if (!user) setIsAuthOpen(true);
+                else setCurrentView('post');
+              }}
+              className="w-20 h-20 bg-[#4CAF50] rounded-full flex flex-col items-center justify-center text-white shadow-inner active:scale-95 transition-transform"
+            >
+              <div className="mt-1"><Icons.Plus /></div>
+              <span className="text-[11px] font-black uppercase tracking-tighter -mt-0.5">Sell</span>
+            </button>
+          </div>
         </div>
 
         <button 
@@ -186,10 +194,10 @@ const App: React.FC = () => {
             if (!user) setIsAuthOpen(true);
             else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 transition-all active:scale-90"
+          className="flex flex-col items-center flex-1 group"
         >
-          <Icons.List active={false} />
-          <span className="text-[9px] font-bold mt-1 text-slate-400">My Ads</span>
+          <div className="mb-1"><Icons.List active={false} /></div>
+          <span className="text-[11px] font-bold text-slate-400 opacity-60">My Ads</span>
         </button>
 
         <button 
@@ -197,17 +205,23 @@ const App: React.FC = () => {
             if (!user) setIsAuthOpen(true);
             else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 transition-all active:scale-90"
+          className="flex flex-col items-center flex-1 group"
         >
-          <Icons.User active={currentView === 'profile'} />
-          <span className={`text-[9px] font-bold mt-1 ${currentView === 'profile' ? 'text-green-600' : 'text-slate-400'}`}>Account</span>
+          <div className="mb-1"><Icons.User active={currentView === 'profile'} /></div>
+          <span className={`text-[11px] font-bold ${currentView === 'profile' ? 'text-green-600' : 'text-slate-400 opacity-60'}`}>Account</span>
         </button>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-green-100">
+    <div className="min-h-screen bg-white font-sans selection:bg-green-100">
+      {authError && (
+        <div className="bg-red-500 text-white p-4 text-center text-sm font-bold sticky top-0 z-[200]">
+          {authError}
+        </div>
+      )}
+      
       <Navbar onViewChange={setCurrentView} currentLocation="Port Blair" />
       
       <main className="max-w-7xl mx-auto">
@@ -215,45 +229,52 @@ const App: React.FC = () => {
         {currentView === 'post' && (
           <ListingForm 
             onSubmit={async (data) => {
-              await addListing(data, user!);
-              setCurrentView('home');
-              fetchAllListings();
+              try {
+                await addListing(data, user!);
+                setCurrentView('home');
+                fetchAllListings();
+              } catch (e) {
+                console.error(e);
+                alert("Failed to post ad. Check console for details.");
+              }
             }} 
             onCancel={() => setCurrentView('home')} 
           />
         )}
         {currentView === 'details' && selectedListing && (
-          <div className="px-4 py-6 pb-24">
-             {/* Simple back button for details view since BottomNav is present */}
+          <div className="px-5 py-6 pb-32">
              <button 
                onClick={() => setCurrentView('home')}
-               className="mb-4 text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"
+               className="mb-6 text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"
              >
                ← Back
              </button>
-             <ListingCard listing={selectedListing} onClick={() => {}} />
-             <div className="mt-8 bg-white p-6 rounded-3xl border border-slate-100 space-y-4">
-                <h2 className="text-xl font-bold">{selectedListing.title}</h2>
-                <p className="text-slate-600 text-sm leading-relaxed">{selectedListing.description}</p>
-                <div className="pt-4 border-t border-slate-50 flex gap-4">
-                  <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-green-600 text-white text-center py-3 rounded-xl font-bold uppercase text-xs tracking-widest">Call Now</a>
-                  <button onClick={() => setIsChatOpen(true)} className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest">Chat</button>
-                </div>
+             <div className="max-w-md mx-auto">
+               <ListingCard listing={selectedListing} onClick={() => {}} />
+               <div className="mt-8 bg-white p-2 space-y-6">
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-slate-900">{selectedListing.title}</h2>
+                    <p className="text-slate-400 text-base leading-relaxed font-medium">{selectedListing.description}</p>
+                  </div>
+                  
+                  <div className="flex gap-4">
+                    <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-green-600 text-white text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-green-200">Call Now</a>
+                    <button onClick={() => setIsChatOpen(true)} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-slate-200">Chat</button>
+                  </div>
+               </div>
              </div>
           </div>
         )}
         {currentView === 'profile' && user && (
-          <div className="p-8 pb-32">
-             <div className="text-center mb-8">
-                <div className="w-24 h-24 bg-green-50 text-green-600 rounded-full mx-auto flex items-center justify-center mb-4">
-                  <Icons.User active />
-                </div>
-                <h2 className="text-2xl font-bold">{user.name}</h2>
-                <p className="text-slate-400 text-sm">{user.email}</p>
+          <div className="p-10 pb-32 text-center">
+             <div className="w-24 h-24 bg-green-50 text-green-600 rounded-full mx-auto flex items-center justify-center mb-6 shadow-sm">
+               <Icons.User active />
              </div>
+             <h2 className="text-2xl font-black text-slate-900 mb-1">{user.name}</h2>
+             <p className="text-slate-400 font-bold text-sm mb-10">{user.email}</p>
              <button 
                onClick={async () => { await logout(); setUser(null); setCurrentView('home'); }}
-               className="w-full bg-red-50 text-red-500 py-3 rounded-xl font-bold uppercase text-xs tracking-widest"
+               className="w-full max-w-xs bg-red-50 text-red-500 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-100 transition-colors"
              >
                Sign Out
              </button>

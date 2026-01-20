@@ -1,5 +1,5 @@
 import React from 'react';
-import { PropertyListing, ListingStatus } from '../types.ts';
+import { PropertyListing } from '../types.ts';
 import { Icons } from '../constants.tsx';
 
 interface ListingCardProps {
@@ -15,14 +15,14 @@ const ListingCard: React.FC<ListingCardProps> = ({
   isFavorited, 
   onFavoriteToggle 
 }) => {
-  const isSale = listing.category.toLowerCase().includes('sale');
+  const isRent = listing.category.toLowerCase().includes('rent');
   
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0
-    }).format(price).replace('INR', '₹');
+    }).format(price).replace('INR', '₹ ');
   };
 
   const mainImage = listing.imageUrls && listing.imageUrls.length > 0 
@@ -35,9 +35,9 @@ const ListingCard: React.FC<ListingCardProps> = ({
   return (
     <div 
       onClick={() => onClick(listing)}
-      className="bg-white rounded-3xl border border-slate-100 p-2 overflow-hidden hover:shadow-lg transition-shadow duration-300 cursor-pointer group"
+      className="bg-white rounded-2xl overflow-hidden cursor-pointer group shadow-sm border border-slate-50"
     >
-      <div className="relative aspect-[4/3] rounded-2xl overflow-hidden">
+      <div className="relative aspect-[4/3] m-2 rounded-xl overflow-hidden">
         <img 
           src={mainImage} 
           alt={listing.title}
@@ -50,43 +50,43 @@ const ListingCard: React.FC<ListingCardProps> = ({
             e.stopPropagation();
             onFavoriteToggle?.(e, listing.id);
           }}
-          className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full shadow-sm hover:bg-white transition-all active:scale-90"
+          className="absolute top-2 right-2 bg-white p-1.5 rounded-full shadow-md transition-all active:scale-90"
         >
           <Icons.Heart filled={isFavorited} />
         </button>
 
         {/* For Rent / Sale Badge */}
-        <div className="absolute bottom-2 left-2 bg-[#FFD740] text-black px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider">
-          {isSale ? 'FOR SALE' : 'FOR RENT'}
+        <div className="absolute bottom-2 left-2 bg-[#FFD740] text-black px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">
+          {isRent ? 'FOR RENT' : 'FOR SALE'}
         </div>
       </div>
       
-      <div className="px-1.5 py-3 space-y-2">
-        <div className="text-xl font-bold text-slate-900">
+      <div className="px-3.5 pb-4 pt-1 space-y-1.5">
+        <div className="text-xl font-black text-slate-900">
           {formatPrice(listing.price)}
         </div>
         
-        <h3 className="text-sm font-medium text-slate-500 line-clamp-1">
+        <h3 className="text-sm font-semibold text-slate-400 line-clamp-1">
           {listing.title}
         </h3>
         
-        <div className="flex flex-wrap gap-1.5 mt-1">
+        <div className="flex flex-wrap gap-2 pt-1">
           {listing.bhk && (
-            <span className="bg-slate-50 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-100">
+            <span className="bg-slate-50 text-slate-400 text-[10px] font-bold px-2 py-1.5 rounded-md border border-slate-100">
               {listing.bhk}
             </span>
           )}
-          <span className="bg-slate-50 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-100 uppercase">
+          <span className="bg-slate-50 text-slate-400 text-[10px] font-bold px-2 py-1.5 rounded-md border border-slate-100 uppercase">
             {listing.area} {listing.areaUnit}
           </span>
         </div>
         
-        <div className="flex justify-between items-center pt-2 mt-1">
-          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-            <Icons.Location />
+        <div className="flex justify-between items-center pt-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
+            <div className="text-green-500 opacity-60"><Icons.Location /></div>
             <span>{listing.location.split(' ')[0]}</span>
           </div>
-          <div className="text-[10px] font-bold text-slate-400">
+          <div className="text-[10px] font-black text-slate-300 uppercase">
             {formattedDate}
           </div>
         </div>
