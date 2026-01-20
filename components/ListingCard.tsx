@@ -22,7 +22,7 @@ const ListingCard: React.FC<ListingCardProps> = ({
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0
-    }).format(price).replace('INR', '₹ ');
+    }).format(price).replace('INR', '₹');
   };
 
   const mainImage = listing.imageUrls && listing.imageUrls.length > 0 
@@ -35,58 +35,56 @@ const ListingCard: React.FC<ListingCardProps> = ({
   return (
     <div 
       onClick={() => onClick(listing)}
-      className="bg-white rounded-2xl overflow-hidden cursor-pointer group shadow-sm border border-slate-50"
+      className="bg-white rounded-2xl overflow-hidden cursor-pointer group shadow-sm border border-slate-100/50"
     >
-      <div className="relative aspect-[4/3] m-2 rounded-xl overflow-hidden">
+      <div className="relative aspect-square m-1 rounded-xl overflow-hidden">
         <img 
           src={mainImage} 
           alt={listing.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         
-        {/* Favorite Button */}
         <button 
           onClick={(e) => {
             e.stopPropagation();
             onFavoriteToggle?.(e, listing.id);
           }}
-          className="absolute top-2 right-2 bg-white p-1.5 rounded-full shadow-md transition-all active:scale-90"
+          className="absolute top-2.5 right-2.5 bg-white p-1.5 rounded-full shadow-md transition-all active:scale-90"
         >
           <Icons.Heart filled={isFavorited} />
         </button>
 
-        {/* For Rent / Sale Badge */}
-        <div className="absolute bottom-2 left-2 bg-[#FFD740] text-black px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shadow-sm">
+        <div className="absolute bottom-2 left-2 bg-[#FFD740] text-black px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
           {isRent ? 'FOR RENT' : 'FOR SALE'}
         </div>
       </div>
       
-      <div className="px-3.5 pb-4 pt-1 space-y-1.5">
-        <div className="text-xl font-black text-slate-900">
+      <div className="px-3 pb-4 pt-1 space-y-1">
+        <div className="text-xl font-black text-slate-900 leading-tight">
           {formatPrice(listing.price)}
         </div>
         
-        <h3 className="text-sm font-semibold text-slate-400 line-clamp-1">
+        <div className="text-[11px] font-medium text-slate-500 line-clamp-1">
           {listing.title}
-        </h3>
+        </div>
         
         <div className="flex flex-wrap gap-2 pt-1">
           {listing.bhk && (
-            <span className="bg-slate-50 text-slate-400 text-[10px] font-bold px-2 py-1.5 rounded-md border border-slate-100">
+            <span className="bg-[#F8F9FA] text-[#9099A3] text-[10px] font-bold px-2 py-1 rounded-md border border-slate-100">
               {listing.bhk}
             </span>
           )}
-          <span className="bg-slate-50 text-slate-400 text-[10px] font-bold px-2 py-1.5 rounded-md border border-slate-100 uppercase">
+          <span className="bg-[#F8F9FA] text-[#9099A3] text-[10px] font-bold px-2 py-1 rounded-md border border-slate-100 uppercase">
             {listing.area} {listing.areaUnit}
           </span>
         </div>
         
-        <div className="flex justify-between items-center pt-2">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
-            <div className="text-green-500 opacity-60"><Icons.Location /></div>
+        <div className="flex justify-between items-center pt-3 border-t border-slate-50">
+          <div className="flex items-center gap-1 text-[10px] font-bold text-[#A0A8B0] uppercase">
+            <div className="text-green-500/60"><Icons.Location /></div>
             <span>{listing.location.split(' ')[0]}</span>
           </div>
-          <div className="text-[10px] font-black text-slate-300 uppercase">
+          <div className="text-[10px] font-bold text-[#A0A8B0] uppercase">
             {formattedDate}
           </div>
         </div>

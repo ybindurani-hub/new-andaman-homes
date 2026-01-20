@@ -13,12 +13,13 @@ const Navbar: React.FC<NavbarProps> = ({ onViewChange, currentLocation }) => {
         className="cursor-pointer"
         onClick={() => onViewChange('home')}
       >
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-          Andaman<span className="text-slate-800">Homes</span>
+        <h1 className="text-2xl font-bold tracking-tight">
+          <span className="text-[#4CAF50]">Andaman</span>
+          <span className="text-[#1A1C1E]">Homes</span>
         </h1>
       </div>
       <div className="flex items-center gap-1">
-        <span className="text-base font-bold text-slate-800">{currentLocation}</span>
+        <span className="text-sm font-bold text-[#1A1C1E]">{currentLocation}</span>
       </div>
     </header>
   );

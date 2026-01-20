@@ -35,14 +35,14 @@ const App: React.FC = () => {
         try {
           const favs = await getFavorites(userData.id);
           setFavorites(favs);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Favs load error:", e); }
       } else {
         setUser(null);
         setFavorites([]);
       }
     }, (error) => {
       if (error.message.includes('unauthorized-domain')) {
-        setAuthError("Auth Error: This domain is not authorized in Firebase Console. Please add it to 'Authorized Domains' in your Firebase Auth settings.");
+        setAuthError(`Auth Error: This domain ('${window.location.hostname}') is not authorized in Firebase Console. Please add it to your Authorized Domains.`);
       }
     });
     return () => unsubscribe();
@@ -86,39 +86,32 @@ const App: React.FC = () => {
 
   const renderHome = () => (
     <div className="pb-32 bg-white min-h-screen">
-      {/* Ad Banner Placeholder */}
-      <div className="max-w-7xl mx-auto px-5 mt-2">
-        <div className="bg-[#F8FBF8] border border-slate-50 py-4 rounded-xl text-center">
-          <span className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] opacity-80">GOOGLE ADMOB BANNER (TOP)</span>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="max-w-7xl mx-auto px-5 mt-6">
+      {/* Search Bar - Matching reference image style */}
+      <div className="max-w-7xl mx-auto px-5 mt-4">
         <div className="relative">
-          <div className="absolute inset-y-0 left-5 flex items-center text-slate-300 pointer-events-none">
+          <div className="absolute inset-y-0 left-5 flex items-center text-[#B0B8C1] pointer-events-none">
             <Icons.Search />
           </div>
           <input 
             type="text" 
             placeholder="Search Port Blair, Havelock, etc..." 
-            className="w-full bg-white border border-slate-100 rounded-full py-4 pl-14 pr-6 outline-none shadow-[0_4px_12px_rgba(0,0,0,0.03)] focus:border-green-100 transition-all font-medium text-slate-700 text-lg placeholder:text-slate-300"
+            className="w-full bg-[#F1F3F5] border-none rounded-2xl py-4 pl-14 pr-6 outline-none shadow-none focus:ring-1 focus:ring-green-100 transition-all font-medium text-slate-700 text-lg placeholder:text-[#A0A8B0]"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
-      {/* Filter Chips */}
+      {/* Filter Chips - Matching reference image style */}
       <div className="max-w-7xl mx-auto px-5 mt-8 flex gap-3 overflow-x-auto no-scrollbar">
         {(['ALL', 'RENT', 'SALE'] as const).map(type => (
           <button
             key={type}
             onClick={() => setFilterType(type)}
-            className={`px-10 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+            className={`px-10 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${
               filterType === type 
-                ? 'bg-[#4CAF50] text-white shadow-lg shadow-green-500/20' 
-                : 'bg-[#F1F3F5] text-slate-400 hover:bg-slate-200'
+                ? 'bg-[#4CAF50] text-white shadow-md' 
+                : 'bg-[#F1F3F5] text-[#808A93] hover:bg-slate-200'
             }`}
           >
             {type}
@@ -126,7 +119,7 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      {/* Grid */}
+      {/* Grid - 2 columns for mobile as per reference image */}
       <div className="max-w-7xl mx-auto px-5 mt-10">
         <div className="grid grid-cols-2 gap-4">
           {filteredListings.map(listing => (
@@ -157,10 +150,10 @@ const App: React.FC = () => {
       <div className="max-w-lg mx-auto flex items-end justify-between relative h-16">
         <button 
           onClick={() => setCurrentView('home')}
-          className="flex flex-col items-center flex-1 group"
+          className="flex flex-col items-center flex-1"
         >
           <div className="mb-1"><Icons.Home active={currentView === 'home'} /></div>
-          <span className={`text-[11px] font-bold ${currentView === 'home' ? 'text-green-600' : 'text-slate-400 opacity-60'}`}>Home</span>
+          <span className={`text-[11px] font-bold ${currentView === 'home' ? 'text-green-600' : 'text-[#A0A8B0]'}`}>Home</span>
         </button>
         
         <button 
@@ -168,23 +161,26 @@ const App: React.FC = () => {
             if (!user) setIsAuthOpen(true);
             else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 group"
+          className="flex flex-col items-center flex-1"
         >
           <div className="mb-1"><Icons.Heart filled={false} /></div>
-          <span className="text-[11px] font-bold text-slate-400 opacity-60">Saved</span>
+          <span className="text-[11px] font-bold text-[#A0A8B0]">Saved</span>
         </button>
 
         <div className="flex-1 flex justify-center pb-2">
-          <div className="absolute -top-12 bg-white p-2.5 rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.1)]">
+          <div className="absolute -top-12 bg-white p-2.5 rounded-full shadow-lg">
             <button 
               onClick={() => {
-                if (!user) setIsAuthOpen(true);
-                else setCurrentView('post');
+                if (!user) {
+                  setIsAuthOpen(true);
+                } else {
+                  setCurrentView('post');
+                }
               }}
-              className="w-20 h-20 bg-[#4CAF50] rounded-full flex flex-col items-center justify-center text-white shadow-inner active:scale-95 transition-transform"
+              className="w-16 h-16 bg-[#4CAF50] rounded-full flex flex-col items-center justify-center text-white shadow-lg active:scale-95 transition-transform"
             >
               <div className="mt-1"><Icons.Plus /></div>
-              <span className="text-[11px] font-black uppercase tracking-tighter -mt-0.5">Sell</span>
+              <span className="text-[10px] font-black uppercase tracking-tighter -mt-0.5">Sell</span>
             </button>
           </div>
         </div>
@@ -194,10 +190,10 @@ const App: React.FC = () => {
             if (!user) setIsAuthOpen(true);
             else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 group"
+          className="flex flex-col items-center flex-1"
         >
           <div className="mb-1"><Icons.List active={false} /></div>
-          <span className="text-[11px] font-bold text-slate-400 opacity-60">My Ads</span>
+          <span className="text-[11px] font-bold text-[#A0A8B0]">My Ads</span>
         </button>
 
         <button 
@@ -205,10 +201,10 @@ const App: React.FC = () => {
             if (!user) setIsAuthOpen(true);
             else setCurrentView('profile');
           }}
-          className="flex flex-col items-center flex-1 group"
+          className="flex flex-col items-center flex-1"
         >
           <div className="mb-1"><Icons.User active={currentView === 'profile'} /></div>
-          <span className={`text-[11px] font-bold ${currentView === 'profile' ? 'text-green-600' : 'text-slate-400 opacity-60'}`}>Account</span>
+          <span className={`text-[11px] font-bold ${currentView === 'profile' ? 'text-green-600' : 'text-[#A0A8B0]'}`}>Account</span>
         </button>
       </div>
     </div>
@@ -229,13 +225,21 @@ const App: React.FC = () => {
         {currentView === 'post' && (
           <ListingForm 
             onSubmit={async (data) => {
+              if (!user) {
+                setIsAuthOpen(true);
+                return;
+              }
               try {
-                await addListing(data, user!);
+                setLoading(true);
+                const newListing = await addListing(data, user);
+                // Optimistically update the list locally
+                setListings(prev => [newListing, ...prev]);
                 setCurrentView('home');
-                fetchAllListings();
+                setLoading(false);
               } catch (e) {
-                console.error(e);
-                alert("Failed to post ad. Check console for details.");
+                setLoading(false);
+                console.error("Post listing error:", e);
+                alert("Failed to post ad. Please try again or check your connection.");
               }
             }} 
             onCancel={() => setCurrentView('home')} 
@@ -245,7 +249,7 @@ const App: React.FC = () => {
           <div className="px-5 py-6 pb-32">
              <button 
                onClick={() => setCurrentView('home')}
-               className="mb-6 text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"
+               className="mb-6 text-xs font-black text-[#B0B8C1] uppercase tracking-widest flex items-center gap-2"
              >
                ← Back
              </button>
@@ -258,8 +262,11 @@ const App: React.FC = () => {
                   </div>
                   
                   <div className="flex gap-4">
-                    <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-green-600 text-white text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-green-200">Call Now</a>
-                    <button onClick={() => setIsChatOpen(true)} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-slate-200">Chat</button>
+                    <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-green-600 text-white text-center py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-green-100">Call Now</a>
+                    <button onClick={() => {
+                      if (!user) setIsAuthOpen(true);
+                      else setIsChatOpen(true);
+                    }} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-slate-100">Chat</button>
                   </div>
                </div>
              </div>
