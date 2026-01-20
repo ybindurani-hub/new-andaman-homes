@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { ListingCategory, PropertyListing, FurnishingStatus } from '../types';
-import { ANDAMAN_LOCATIONS, Icons } from '../constants';
-import { enhanceDescription } from '../services/geminiService';
+import { ListingCategory, PropertyListing, FurnishingStatus } from '../types.ts';
+import { ANDAMAN_LOCATIONS, Icons } from '../constants.tsx';
+import { enhanceDescription } from '../services/geminiService.ts';
 
 interface ListingFormProps {
   onSubmit: (listing: any) => void;

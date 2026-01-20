@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { Icons } from '../constants';
-import { User, ViewState } from '../types';
+import { Icons } from '../constants.tsx';
+import { User, ViewState } from '../types.ts';
 
 interface NavbarProps {
   user: User | null;

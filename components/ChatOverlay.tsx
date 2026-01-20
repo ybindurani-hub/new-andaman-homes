@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, PropertyListing, ChatMessage } from '../types';
-import { Icons } from '../constants';
+import { User, PropertyListing, ChatMessage } from '../types.ts';
+import { Icons } from '../constants.tsx';
 
 interface ChatOverlayProps {
   isOpen: boolean;

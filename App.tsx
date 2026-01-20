@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth, getListings, addListing, logout } from './services/firebase';
+import { auth, getListings, addListing, logout } from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { User, PropertyListing, ViewState, ListingCategory, FurnishingStatus } from './types';
-import Navbar from './components/Navbar';
-import ListingCard from './components/ListingCard';
-import ListingForm from './components/ListingForm';
-import AuthOverlay from './components/AuthOverlay';
-import ChatOverlay from './components/ChatOverlay';
-import { ANDAMAN_LOCATIONS, Icons } from './constants';
+import { User, PropertyListing, ViewState, ListingCategory, FurnishingStatus } from './types.ts';
+import Navbar from './components/Navbar.tsx';
+import ListingCard from './components/ListingCard.tsx';
+import ListingForm from './components/ListingForm.tsx';
+import AuthOverlay from './components/AuthOverlay.tsx';
+import ChatOverlay from './components/ChatOverlay.tsx';
+import { ANDAMAN_LOCATIONS, Icons } from './constants.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -34,7 +34,7 @@ const App: React.FC = () => {
       } else {
         setUser(null);
       }
-      setLoading(false);
+      // Auth check complete
     });
     return () => unsubscribe();
   }, []);
@@ -46,6 +46,8 @@ const App: React.FC = () => {
         setListings(data);
       } catch (err) {
         console.error("Error fetching listings:", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchListings();
@@ -59,12 +61,15 @@ const App: React.FC = () => {
       setCurrentView('home');
     } catch (err) {
       console.error("Error posting listing:", err);
+      alert("Error posting listing. Please check your Firebase permissions.");
     }
   };
 
   const filteredListings = listings.filter(l => {
-    const matchesSearch = l.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          l.location.toLowerCase().includes(searchQuery.toLowerCase());
+    const title = l.title || '';
+    const loc = l.location || '';
+    const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          loc.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = filterCategory === 'All' || l.category === filterCategory;
     const matchesLocation = filterLocation === 'All' || l.location === filterLocation;
     return matchesSearch && matchesCategory && matchesLocation;
@@ -220,10 +225,10 @@ const App: React.FC = () => {
               <div className="pt-8 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-6">
                  <div className="flex items-center gap-4">
                    <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-teal-700 rounded-xl flex items-center justify-center font-black text-white text-xl shadow-xl shadow-teal-500/20">
-                     {selectedListing.ownerName.charAt(0)}
+                     {selectedListing.ownerName ? selectedListing.ownerName.charAt(0) : 'U'}
                    </div>
                    <div>
-                     <p className="text-sm font-bold text-slate-900 leading-none mb-1">{selectedListing.ownerName}</p>
+                     <p className="text-sm font-bold text-slate-900 leading-none mb-1">{selectedListing.ownerName || 'User'}</p>
                      <div className="flex items-center gap-1">
                        <span className="w-1 h-1 bg-teal-500 rounded-full"></span>
                        <p className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">Identity Verified</p>

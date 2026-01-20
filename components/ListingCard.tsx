@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { PropertyListing, ListingCategory } from '../types';
-import { Icons } from '../constants';
+import { PropertyListing, ListingCategory } from '../types.ts';
+import { Icons } from '../constants.tsx';
 
 interface ListingCardProps {
   listing: PropertyListing;
