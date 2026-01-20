@@ -8,23 +8,40 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
         .font-display { font-family: 'Playfair Display', serif; }
         /* Smooth transitions for all elements */
         * { transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out; }
+        
+        #error-display {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #0f172a; color: #f1f5f9;
+            z-index: 9999; padding: 2rem; font-family: monospace;
+            overflow: auto;
+        }
     </style>
     <script>
         // Polyfill for process.env to prevent crashes in the browser
-        window.process = {
-            env: {
-                API_KEY: "" 
+        window.process = window.process || { env: { API_KEY: "" } };
+        window.process.env.API_KEY = window.process.env.API_KEY || "";
+
+        // Global error catcher to help debug white pages on certain browsers/platforms
+        window.addEventListener('error', function(e) {
+            console.error('Boot error caught:', e);
+            const display = document.getElementById('error-display');
+            if (display) {
+                display.style.display = 'block';
+                display.innerHTML += `<div><strong>Runtime Error:</strong> ${e.message}<br><small>${e.filename}:${e.lineno}</small></div><hr style="opacity:0.1;margin:10px 0;">`;
             }
-        };
+        });
     </script>
 <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
+    "react/jsx-runtime": "https://esm.sh/react@19.0.0/jsx-runtime",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "@google/genai": "https://esm.sh/@google/genai@1.37.0",
@@ -35,6 +52,7 @@
 </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
+    <div id="error-display"><h1>Application Startup Error</h1><p>Check console for details.</p><hr></div>
     <div id="root"></div>
     <script type="module" src="index.tsx"></script>
 </body>

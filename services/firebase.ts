@@ -65,6 +65,20 @@ const FALLBACK_LISTINGS: PropertyListing[] = [
     ownerName: 'Admin',
     contactNumber: '9999999999',
     postedAt: Date.now()
+  },
+  {
+    id: 'f3',
+    title: 'Prime Land Parcel',
+    description: 'Clear title flat land available in Neil Island. Near main market, ideal for home or resort development.',
+    price: 9500000,
+    location: 'Neil Island (Shaheed Dweep)',
+    category: ListingCategory.LAND_SALE,
+    area: '5000 sq.ft',
+    imageUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&q=80&w=1200',
+    ownerId: 'system',
+    ownerName: 'Admin',
+    contactNumber: '9999999999',
+    postedAt: Date.now() - 86400000
   }
 ];
 
@@ -96,53 +110,58 @@ export const signInWithEmail = async (email: string, pass: string): Promise<User
   };
 };
 
+// Fix for truncated setupRecaptcha function
 export const setupRecaptcha = (containerId: string) => {
   if (typeof window !== 'undefined' && !(window as any).recaptchaVerifier) {
     try {
-      (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-        size: 'invisible'
-      });
+      const el = document.getElementById(containerId);
+      if (el) {
+        (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+          size: 'invisible'
+        });
+      }
     } catch (e) {
       console.error("Recaptcha error:", e);
     }
   }
 };
 
-export const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult> => {
-  const verifier = (window as any).recaptchaVerifier;
-  if (!verifier) throw new Error("Recaptcha not initialized");
-  return await signInWithPhoneNumber(auth, phoneNumber, verifier);
-};
-
-export const logout = async () => {
+// Added missing logout export
+export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
 
+// Added missing getListings export with fallback logic
 export const getListings = async (): Promise<PropertyListing[]> => {
   try {
     const q = query(collection(db, "listings"), orderBy("postedAt", "desc"));
-    const snapshot = await getDocs(q);
-    const data = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as PropertyListing[];
-    
-    // If we have data, return it. If empty, return fallbacks for better UX.
-    return data.length > 0 ? data : FALLBACK_LISTINGS;
-  } catch (e: any) {
-    console.warn("Firestore access denied or error. Falling back to mock data.", e.message);
-    // On permission error, return fallback listings so the app doesn't look broken
+    const querySnapshot = await getDocs(q);
+    const listings: PropertyListing[] = [];
+    querySnapshot.forEach((doc) => {
+      listings.push({ id: doc.id, ...doc.data() } as PropertyListing);
+    });
+    return listings.length > 0 ? listings : FALLBACK_LISTINGS;
+  } catch (error) {
+    console.error("Firestore get error:", error);
     return FALLBACK_LISTINGS;
   }
 };
 
-export const addListing = async (listing: any, user: User): Promise<PropertyListing> => {
-  const listingData = {
-    ...listing,
+// Added missing addListing export
+export const addListing = async (listingData: any, user: User): Promise<PropertyListing> => {
+  const listing = {
+    ...listingData,
     ownerId: user.id,
     ownerName: user.name,
     postedAt: Date.now()
   };
-  const docRef = await addDoc(collection(db, "listings"), listingData);
-  return { id: docRef.id, ...listingData };
+  const docRef = await addDoc(collection(db, "listings"), listing);
+  return { id: docRef.id, ...listing } as PropertyListing;
+};
+
+// Added missing sendOTP export
+export const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult> => {
+  const verifier = (window as any).recaptchaVerifier;
+  if (!verifier) throw new Error("Recaptcha not initialized. Ensure setupRecaptcha was called.");
+  return await signInWithPhoneNumber(auth, phoneNumber, verifier);
 };
