@@ -42,6 +42,10 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+// LOCAL STORAGE FALLBACK KEYS
+const STORAGE_KEY = 'andaman_homes_local_listings';
+const FAVORITES_KEY = 'andaman_homes_favorites';
+
 export const loginWithGoogle = async (): Promise<User> => {
   const result = await signInWithPopup(auth, googleProvider);
   return {
@@ -75,6 +79,8 @@ export const logout = async (): Promise<void> => {
 };
 
 export const getListings = async (): Promise<PropertyListing[]> => {
+  const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  
   try {
     const q = query(collection(db, "listings"), orderBy("postedAt", "desc"));
     const querySnapshot = await getDocs(q);
@@ -82,10 +88,12 @@ export const getListings = async (): Promise<PropertyListing[]> => {
     querySnapshot.forEach((doc) => {
       listings.push({ id: doc.id, ...doc.data() } as PropertyListing);
     });
-    return listings;
+    
+    // Combine cloud and local listings for the user
+    return [...localListings, ...listings];
   } catch (error) {
-    console.warn("Firestore access issues:", error);
-    return [];
+    console.warn("Firestore fetch failed, returning local listings only:", error);
+    return localListings;
   }
 };
 
@@ -97,18 +105,55 @@ export const addListing = async (listingData: any, user: User): Promise<Property
     ownerName: user.name,
     postedAt: Date.now()
   };
-  const docRef = await addDoc(collection(db, "listings"), listing);
-  return { id: docRef.id, ...listing } as PropertyListing;
+
+  try {
+    const docRef = await addDoc(collection(db, "listings"), listing);
+    return { id: docRef.id, ...listing } as PropertyListing;
+  } catch (error) {
+    console.warn("Firestore save failed, falling back to LocalStorage:", error);
+    
+    // Save to local storage so user doesn't lose data and sees it in UI
+    const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const localListingWithId = { ...listing, id: 'local_' + Date.now() };
+    localListings.unshift(localListingWithId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localListings));
+    
+    return localListingWithId as PropertyListing;
+  }
 };
 
 export const deleteListing = async (listingId: string) => {
-  const listingRef = doc(db, "listings", listingId);
-  await deleteDoc(listingRef);
+  if (listingId.startsWith('local_')) {
+    const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const filtered = localListings.filter((l: any) => l.id !== listingId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    return;
+  }
+
+  try {
+    const listingRef = doc(db, "listings", listingId);
+    await deleteDoc(listingRef);
+  } catch (error) {
+    console.error("Delete failed:", error);
+    throw error;
+  }
 };
 
 export const updateListingStatus = async (listingId: string, status: ListingStatus) => {
-  const listingRef = doc(db, "listings", listingId);
-  await updateDoc(listingRef, { status });
+  if (listingId.startsWith('local_')) {
+    const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const updated = localListings.map((l: any) => l.id === listingId ? { ...l, status } : l);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    return;
+  }
+
+  try {
+    const listingRef = doc(db, "listings", listingId);
+    await updateDoc(listingRef, { status });
+  } catch (error) {
+    console.error("Update failed:", error);
+    throw error;
+  }
 };
 
 export const sendOTP = async (phoneNumber: string, verifier: any): Promise<ConfirmationResult> => {
@@ -117,15 +162,19 @@ export const sendOTP = async (phoneNumber: string, verifier: any): Promise<Confi
 
 // Chat Functions
 export const sendMessage = async (listingId: string, recipientId: string, sender: User, text: string) => {
-  const chatId = [sender.id, recipientId, listingId].sort().join('_');
-  const chatRef = collection(db, "chats", chatId, "messages");
-  
-  await addDoc(chatRef, {
-    senderId: sender.id,
-    senderName: sender.name,
-    text,
-    timestamp: Date.now()
-  });
+  try {
+    const chatId = [sender.id, recipientId, listingId].sort().join('_');
+    const chatRef = collection(db, "chats", chatId, "messages");
+    
+    await addDoc(chatRef, {
+      senderId: sender.id,
+      senderName: sender.name,
+      text,
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    console.error("Chat message failed:", error);
+  }
 };
 
 export const listenToMessages = (listingId: string, recipientId: string, senderId: string, callback: (messages: ChatMessage[]) => void) => {
@@ -138,5 +187,49 @@ export const listenToMessages = (listingId: string, recipientId: string, senderI
       messages.push({ id: doc.id, ...doc.data() } as ChatMessage);
     });
     callback(messages);
+  }, (error) => {
+    console.warn("Chat listen failed:", error);
   });
+};
+
+// Favorite Functions
+export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
+  const favorites = JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
+  const index = favorites.indexOf(listingId);
+  let newFavorites: string[];
+
+  if (index === -1) {
+    newFavorites = [...favorites, listingId];
+  } else {
+    newFavorites = favorites.filter((id: string) => id !== listingId);
+  }
+
+  localStorage.setItem(`${FAVORITES_KEY}_${userId}`, JSON.stringify(newFavorites));
+  
+  // Try cloud sync if possible
+  try {
+    const userRef = doc(db, "users", userId);
+    await setDoc(userRef, { favorites: newFavorites }, { merge: true });
+  } catch (e) {
+    console.warn("Cloud favorite sync failed:", e);
+  }
+
+  return newFavorites;
+};
+
+export const getFavorites = async (userId: string): Promise<string[]> => {
+  try {
+    const userDoc = await getDocs(query(collection(db, "users"), where("__name__", "==", userId)));
+    if (!userDoc.empty) {
+      const data = userDoc.docs[0].data();
+      if (data.favorites) {
+        localStorage.setItem(`${FAVORITES_KEY}_${userId}`, JSON.stringify(data.favorites));
+        return data.favorites;
+      }
+    }
+  } catch (e) {
+    console.warn("Cloud favorites fetch failed:", e);
+  }
+
+  return JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
 };
