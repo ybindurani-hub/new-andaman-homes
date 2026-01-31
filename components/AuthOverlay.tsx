@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { signUpWithEmail, signInWithEmail, loginWithGoogle, sendOTP } from '../services/firebase.ts';
-import { getRecaptchaVerifier } from '../services/recaptcha.ts';
 import { User } from '../types.ts';
 
 interface AuthOverlayProps {
@@ -28,12 +27,9 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
     setLoading(true);
     setError('');
     try {
-      let user;
-      if (authMode === 'signup') {
-        user = await signUpWithEmail(email, password, name);
-      } else {
-        user = await signInWithEmail(email, password);
-      }
+      const user = authMode === 'signup' 
+        ? await signUpWithEmail(email, password, name)
+        : await signInWithEmail(email, password);
       onUserSet(user);
       onClose();
     } catch (err: any) {
@@ -47,8 +43,11 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
     setLoading(true);
     try {
       const user = await loginWithGoogle();
-      onUserSet(user);
-      onClose();
+      if (user) {
+        onUserSet(user);
+        onClose();
+      }
+      // If user is undefined, it means redirect flow started
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -57,14 +56,14 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
   };
 
   const handleSendOTP = async () => {
+    if (phone.length < 10) return;
     setLoading(true);
     setError('');
     try {
-      const verifier = getRecaptchaVerifier();
-      const res = await sendOTP('+91' + phone, verifier);
+      const res = await sendOTP('+91' + phone);
       setConfirmationResult(res);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to send OTP. Try again later.');
     } finally {
       setLoading(false);
     }
@@ -77,21 +76,21 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
       const result = await confirmationResult.confirm(otp);
       const user: User = {
         id: result.user.uid,
-        name: result.user.displayName || 'New User',
+        name: result.user.displayName || 'User',
         email: result.user.email || '',
         phoneNumber: result.user.phoneNumber
       };
       onUserSet(user);
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError('Invalid OTP. Please check and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
       <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
         <div className="p-8 pb-4 text-center">
            <div className="w-16 h-16 bg-slate-50 rounded-2xl mx-auto flex items-center justify-center mb-6">
@@ -112,17 +111,15 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
             <div className="space-y-4">
               {!confirmationResult ? (
                 <>
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <div className="bg-slate-50 border border-slate-100 px-4 py-4 rounded-2xl font-black text-slate-400">+91</div>
-                      <input 
-                        type="tel" 
-                        placeholder="10-digit number"
-                        className="flex-grow bg-slate-50 border border-slate-100 px-5 py-4 rounded-2xl outline-none focus:border-[#4CAF50] font-bold text-slate-700"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                      />
-                    </div>
+                  <div className="flex gap-2">
+                    <div className="bg-slate-50 border border-slate-100 px-4 py-4 rounded-2xl font-black text-slate-400">+91</div>
+                    <input 
+                      type="tel" 
+                      placeholder="10-digit number"
+                      className="flex-grow bg-slate-50 border border-slate-100 px-5 py-4 rounded-2xl outline-none focus:border-[#4CAF50] font-bold text-slate-700"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    />
                   </div>
                   <button 
                     onClick={handleSendOTP}
@@ -134,15 +131,13 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
                 </>
               ) : (
                 <>
-                  <div className="space-y-2 text-center">
-                    <input 
-                      type="text" 
-                      placeholder="000000"
-                      className="w-full bg-slate-50 border border-slate-100 px-4 py-5 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none text-slate-800"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                    />
-                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="000000"
+                    className="w-full bg-slate-50 border border-slate-100 px-4 py-5 rounded-2xl text-center text-3xl font-black tracking-[0.5em] outline-none text-slate-800"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  />
                   <button 
                     onClick={handleVerifyOTP}
                     disabled={loading || otp.length < 6}
@@ -176,7 +171,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ isOpen, onClose, onUserSet, m
             <button onClick={handleGoogleAuth} className="flex items-center justify-center gap-2 bg-white border-2 border-slate-50 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95">
               <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" /> Google
             </button>
-            <button onClick={() => setAuthMode('phone')} className="flex items-center justify-center gap-2 bg-white border-2 border-slate-50 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95">
+            <button onClick={() => { setAuthMode('phone'); setError(''); setConfirmationResult(null); }} className="flex items-center justify-center gap-2 bg-white border-2 border-slate-50 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95">
               Phone
             </button>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth, getListings, addListing, logout, getFavorites, toggleFavorite, deleteListing, updateListingStatus } from './services/firebase.ts';
+import { auth, getListings, addListing, logout, getFavorites, toggleFavorite, deleteListing, updateListingStatus, handleRedirectResult } from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { User, PropertyListing, ViewState, ListingCategory, ListingStatus } from './types.ts';
 import Navbar from './components/Navbar.tsx';
@@ -34,6 +34,15 @@ const App: React.FC = () => {
   const [pendingView, setPendingView] = useState<ViewState | null>(null);
 
   useEffect(() => {
+    // Check for redirect result on startup (crucial for mobile WebView login)
+    handleRedirectResult().then(redirectUser => {
+      if (redirectUser) {
+        setUser(redirectUser);
+        setSuccessMessage(`Welcome back, ${redirectUser.name}`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userData: User = {

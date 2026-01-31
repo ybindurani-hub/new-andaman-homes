@@ -1,16 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-  getAuth, 
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut, 
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
-  ConfirmationResult,
-  setPersistence,
-  browserLocalPersistence
+  RecaptchaVerifier,
+  ConfirmationResult
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
   getFirestore, 
@@ -40,19 +43,45 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
 
-// IMPORTANT: Set persistence to Local to avoid 'missing initial state' errors in WebViews
-setPersistence(auth, browserLocalPersistence)
-  .catch((error) => console.error("Auth persistence error:", error));
+// Explicitly set persistence to Local to survive mobile WebView refreshes/redirects
+setPersistence(auth, browserLocalPersistence).catch(console.error);
+
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 const STORAGE_KEY = 'andaman_homes_local_listings';
 const FAVORITES_KEY = 'andaman_homes_favorites';
 
-export const loginWithGoogle = async (): Promise<User> => {
+export const handleRedirectResult = async (): Promise<User | null> => {
   try {
-    // Some mobile webviews block sign-in popups. 
-    // Popups are generally more reliable than Redirects in wraps like Median
+    // getRedirectResult should only be called if we think a redirect happened.
+    // Firebase internally handles the check, but we wrap it for safety.
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      return {
+        id: result.user.uid,
+        name: result.user.displayName || 'User',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || undefined
+      };
+    }
+    return null;
+  } catch (error: any) {
+    console.error("Redirect Error:", error.code, error.message);
+    return null;
+  }
+};
+
+export const loginWithGoogle = async (): Promise<User | void> => {
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  
+  if (isMobile) {
+    // For mobile webviews, Redirect is vastly more reliable for 'missing initial state'
+    return signInWithRedirect(auth, googleProvider);
+  }
+
+  try {
     const result = await signInWithPopup(auth, googleProvider);
     return {
       id: result.user.uid,
@@ -61,15 +90,8 @@ export const loginWithGoogle = async (): Promise<User> => {
       photoURL: result.user.photoURL || undefined
     };
   } catch (error: any) {
-    if (error.code === 'auth/unauthorized-domain') {
-      throw new Error("Domain not authorized in Firebase Console.");
-    }
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      throw new Error("Sign-in window was blocked. Please try Email or Phone login.");
-    }
-    // Handle the 'missing initial state' specific case
-    if (error.message.includes('missing initial state')) {
-      throw new Error("Storage access error. Please try Email login instead.");
+    if (error.code === 'auth/popup-blocked' || error.message.includes('initial state')) {
+      return signInWithRedirect(auth, googleProvider);
     }
     throw error;
   }
@@ -97,9 +119,22 @@ export const logout = async (): Promise<void> => {
   await signOut(auth);
 };
 
+// ReCAPTCHA and OTP Logic
+let globalVerifier: any = null;
+
+export const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult> => {
+  if (!globalVerifier) {
+    globalVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'invisible',
+      callback: () => {}
+    });
+  }
+  return await signInWithPhoneNumber(auth, phoneNumber, globalVerifier);
+};
+
+// Firestore Methods
 export const getListings = async (): Promise<PropertyListing[]> => {
   const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  
   try {
     const q = query(collection(db, "listings"), orderBy("postedAt", "desc"));
     const querySnapshot = await getDocs(q);
@@ -109,7 +144,6 @@ export const getListings = async (): Promise<PropertyListing[]> => {
     });
     return [...localListings, ...listings];
   } catch (error) {
-    console.warn("Firestore fetch failed:", error);
     return localListings;
   }
 };
@@ -122,12 +156,10 @@ export const addListing = async (listingData: any, user: User): Promise<Property
     ownerName: user.name,
     postedAt: Date.now()
   };
-
   try {
     const docRef = await addDoc(collection(db, "listings"), listing);
     return { id: docRef.id, ...listing } as PropertyListing;
   } catch (error) {
-    console.warn("Firestore save failed, using local fallback:", error);
     const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     const localListingWithId = { ...listing, id: 'local_' + Date.now() };
     localListings.unshift(localListingWithId);
@@ -139,52 +171,29 @@ export const addListing = async (listingData: any, user: User): Promise<Property
 export const deleteListing = async (listingId: string) => {
   if (listingId.startsWith('local_')) {
     const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const filtered = localListings.filter((l: any) => l.id !== listingId);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localListings.filter((l: any) => l.id !== listingId)));
     return;
   }
-  try {
-    const listingRef = doc(db, "listings", listingId);
-    await deleteDoc(listingRef);
-  } catch (error) {
-    console.error("Delete failed:", error);
-    throw error;
-  }
+  await deleteDoc(doc(db, "listings", listingId));
 };
 
 export const updateListingStatus = async (listingId: string, status: ListingStatus) => {
   if (listingId.startsWith('local_')) {
     const localListings = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const updated = localListings.map((l: any) => l.id === listingId ? { ...l, status } : l);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localListings.map((l: any) => l.id === listingId ? { ...l, status } : l)));
     return;
   }
-  try {
-    const listingRef = doc(db, "listings", listingId);
-    await updateDoc(listingRef, { status });
-  } catch (error) {
-    console.error("Update failed:", error);
-    throw error;
-  }
-};
-
-export const sendOTP = async (phoneNumber: string, verifier: any): Promise<ConfirmationResult> => {
-  return await signInWithPhoneNumber(auth, phoneNumber, verifier);
+  await updateDoc(doc(db, "listings", listingId), { status });
 };
 
 export const sendMessage = async (listingId: string, recipientId: string, sender: User, text: string) => {
-  try {
-    const chatId = [sender.id, recipientId, listingId].sort().join('_');
-    const chatRef = collection(db, "chats", chatId, "messages");
-    await addDoc(chatRef, {
-      senderId: sender.id,
-      senderName: sender.name,
-      text,
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    console.error("Chat message failed:", error);
-  }
+  const chatId = [sender.id, recipientId, listingId].sort().join('_');
+  await addDoc(collection(db, "chats", chatId, "messages"), {
+    senderId: sender.id,
+    senderName: sender.name,
+    text,
+    timestamp: Date.now()
+  });
 };
 
 export const listenToMessages = (listingId: string, recipientId: string, senderId: string, callback: (messages: ChatMessage[]) => void) => {
@@ -192,31 +201,18 @@ export const listenToMessages = (listingId: string, recipientId: string, senderI
   const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
   return onSnapshot(q, (snapshot) => {
     const messages: ChatMessage[] = [];
-    snapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() } as ChatMessage);
-    });
+    snapshot.forEach((doc) => messages.push({ id: doc.id, ...doc.data() } as ChatMessage));
     callback(messages);
-  }, (error) => {
-    console.warn("Chat listen failed:", error);
   });
 };
 
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
   const favorites = JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
-  const index = favorites.indexOf(listingId);
-  let newFavorites: string[];
-  if (index === -1) {
-    newFavorites = [...favorites, listingId];
-  } else {
-    newFavorites = favorites.filter((id: string) => id !== listingId);
-  }
+  const newFavorites = favorites.includes(listingId) ? favorites.filter((id: string) => id !== listingId) : [...favorites, listingId];
   localStorage.setItem(`${FAVORITES_KEY}_${userId}`, JSON.stringify(newFavorites));
   try {
-    const userRef = doc(db, "users", userId);
-    await setDoc(userRef, { favorites: newFavorites }, { merge: true });
-  } catch (e) {
-    console.warn("Cloud favorite sync failed:", e);
-  }
+    await setDoc(doc(db, "users", userId), { favorites: newFavorites }, { merge: true });
+  } catch {}
   return newFavorites;
 };
 
@@ -230,8 +226,6 @@ export const getFavorites = async (userId: string): Promise<string[]> => {
         return data.favorites;
       }
     }
-  } catch (e) {
-    console.warn("Cloud favorites fetch failed:", e);
-  }
+  } catch {}
   return JSON.parse(localStorage.getItem(`${FAVORITES_KEY}_${userId}`) || '[]');
 };
