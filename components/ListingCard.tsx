@@ -1,5 +1,5 @@
 import React from 'react';
-import { PropertyListing } from '../types.ts';
+import { PropertyListing, ListingStatus } from '../types.ts';
 import { Icons } from '../constants.tsx';
 
 interface ListingCardProps {
@@ -20,6 +20,7 @@ const ListingCard: React.FC<ListingCardProps> = ({
   onDelete
 }) => {
   const isRent = listing.category.toLowerCase().includes('rent');
+  const isSoldOrRented = listing.status !== ListingStatus.ACTIVE;
   
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -45,9 +46,17 @@ const ListingCard: React.FC<ListingCardProps> = ({
         <img 
           src={mainImage} 
           alt={listing.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ${isSoldOrRented ? 'grayscale opacity-70' : ''}`}
         />
         
+        {isSoldOrRented && (
+          <div className="absolute inset-0 bg-slate-900/20 flex items-center justify-center">
+             <div className="bg-white text-slate-900 px-4 py-1.5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl border border-white">
+               {listing.status}
+             </div>
+          </div>
+        )}
+
         <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
           <button 
             onClick={(e) => {
@@ -66,7 +75,7 @@ const ListingCard: React.FC<ListingCardProps> = ({
                 onDelete?.(e, listing.id);
               }}
               className="bg-white/90 backdrop-blur-md p-1.5 rounded-full shadow-lg transition-all active:scale-90 text-red-500 hover:bg-red-50"
-              title="Delete Listing"
+              title="Delete Ad"
             >
               <Icons.Trash />
             </button>
