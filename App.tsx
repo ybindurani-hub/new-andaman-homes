@@ -9,6 +9,7 @@ import AuthOverlay from './components/AuthOverlay.tsx';
 import ChatOverlay from './components/ChatOverlay.tsx';
 import AdBanner from './components/AdBanner.tsx';
 import InterstitialAd from './components/InterstitialAd.tsx';
+import LocationOverlay from './components/LocationOverlay.tsx';
 import { Icons, ANDAMAN_LOCATIONS } from './constants.tsx';
 
 const App: React.FC = () => {
@@ -20,11 +21,13 @@ const App: React.FC = () => {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'RENT' | 'SALE'>('ALL');
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<string>('Andaman Islands');
 
   // Ad simulation state
   const [showInterstitial, setShowInterstitial] = useState(false);
@@ -73,10 +76,7 @@ const App: React.FC = () => {
     fetchAllListings();
   }, []);
 
-  // Professional view transition with ads
   const switchView = (view: ViewState) => {
-    // Logic: show interstitial on major view changes, but not too frequently
-    // For this simulation, we show it when viewing details or moving away from home
     if (view === 'details' || (currentView === 'home' && view !== 'home')) {
       setShowInterstitial(true);
       setPendingView(view);
@@ -206,7 +206,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Top Banner Ad */}
       <AdBanner position="top" triggerRefresh={currentView} />
 
       <div className="max-w-4xl mx-auto px-4 mt-6">
@@ -285,7 +284,6 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* Bottom Banner Ad */}
       <AdBanner position="bottom" triggerRefresh={currentView} />
     </div>
   );
@@ -327,7 +325,11 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-white font-sans selection:bg-[#4CAF50]/20 antialiased">
       {authError && <div className="bg-red-500 text-white p-3 text-center text-[10px] font-black uppercase tracking-[0.3em] sticky top-0 z-[1000] shadow-xl">⚠️ {authError}</div>}
       
-      <Navbar onViewChange={switchView} currentLocation="Andaman Islands" />
+      <Navbar 
+        onViewChange={switchView} 
+        onOpenLocation={() => setIsLocationOpen(true)}
+        currentLocation={selectedLocation} 
+      />
       
       <main>
         {currentView === 'home' && renderHome()}
@@ -525,12 +527,22 @@ const App: React.FC = () => {
 
       <BottomNav />
       
-      {/* Simulation Overlays */}
+      {/* Overlays */}
       <AuthOverlay 
         isOpen={isAuthOpen} 
         onClose={() => setIsAuthOpen(false)} 
         onUserSet={(u) => { setUser(u); }} 
         message={authMessage}
+      />
+      <LocationOverlay 
+        isOpen={isLocationOpen} 
+        onClose={() => setIsLocationOpen(false)}
+        onSelect={(loc) => {
+          setSelectedLocation(loc);
+          // Simulating context refresh
+          setSearchQuery('');
+        }}
+        currentLocation={selectedLocation}
       />
       {showInterstitial && <InterstitialAd onClose={handleInterstitialClose} />}
       {selectedListing && user && <ChatOverlay isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} user={user} listing={selectedListing} />}

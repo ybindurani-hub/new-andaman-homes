@@ -71,3 +71,9 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
 }
+
+export interface LocationData {
+  city: string;
+  state: string;
+  fullPath: string;
+}
