@@ -50,7 +50,10 @@ const App: React.FC = () => {
       } else {
         setUser(null);
         setFavorites([]);
-        if (currentView !== 'home') switchView('home');
+        // Protect views that require authentication (except home and details)
+        if (currentView !== 'home' && currentView !== 'details') {
+          switchView('home');
+        }
       }
     }, (error) => {
       if (error.message.includes('unauthorized-domain')) {
@@ -98,7 +101,7 @@ const App: React.FC = () => {
   const handleFavoriteToggle = async (e: React.MouseEvent, listingId: string) => {
     e.stopPropagation();
     if (!user) {
-      setAuthMessage('Login to shortlist this property');
+      setAuthMessage('Sign up to shortlist this property');
       setIsAuthOpen(true);
       return;
     }
@@ -122,7 +125,7 @@ const App: React.FC = () => {
 
   const handleDeleteListing = async (e: React.MouseEvent, listingId: string) => {
     e.stopPropagation();
-    if (!window.confirm("Permantely remove this ad?")) return;
+    if (!window.confirm("Permanently remove this ad?")) return;
     
     try {
       await deleteListing(listingId);
@@ -139,11 +142,7 @@ const App: React.FC = () => {
   };
 
   const handleListingClick = (listing: PropertyListing) => {
-    if (!user) {
-      setAuthMessage('Create an account to view contact details and owner information');
-      setIsAuthOpen(true);
-      return;
-    }
+    // Unauthenticated users can now see the details page
     setSelectedListing(listing);
     switchView('details');
   };
@@ -354,7 +353,7 @@ const App: React.FC = () => {
           />
         )}
         
-        {currentView === 'details' && selectedListing && user && (
+        {currentView === 'details' && selectedListing && (
           <div className="max-w-3xl mx-auto px-4 py-10 pb-40 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AdBanner position="top" triggerRefresh={selectedListing.id} />
             <button onClick={() => switchView('home')} className="mb-8 mt-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3 group">
@@ -385,7 +384,7 @@ const App: React.FC = () => {
 
               <div className="px-2 space-y-10">
                 {/* Status Manager for Owner */}
-                {user.id === selectedListing.ownerId && (
+                {user && user.id === selectedListing.ownerId && (
                   <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed border-slate-200">
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Owner Console</h4>
                     <div className="flex flex-wrap gap-3">
@@ -469,16 +468,31 @@ const App: React.FC = () => {
 
                       <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                         <a 
-                          href={user.id === selectedListing.ownerId ? "#" : `tel:${selectedListing.contactNumber}`} 
-                          onClick={(e) => { if(user.id === selectedListing.ownerId) e.preventDefault(); }}
-                          className={`flex-[2] flex items-center justify-center gap-3 py-6 px-10 rounded-3xl font-black uppercase text-[12px] tracking-[0.2em] shadow-xl active:scale-95 transition-all ${user.id === selectedListing.ownerId ? 'bg-white/10 text-white/40 cursor-not-allowed' : 'bg-[#4CAF50] hover:bg-[#43a047] text-white'}`}
+                          href={user ? (user.id === selectedListing.ownerId ? "#" : `tel:${selectedListing.contactNumber}`) : "#"} 
+                          onClick={(e) => { 
+                            if (!user) {
+                              e.preventDefault();
+                              setAuthMessage('Sign in to call the property owner');
+                              setIsAuthOpen(true);
+                            } else if(user.id === selectedListing.ownerId) {
+                              e.preventDefault();
+                            }
+                          }}
+                          className={`flex-[2] flex items-center justify-center gap-3 py-6 px-10 rounded-3xl font-black uppercase text-[12px] tracking-[0.2em] shadow-xl active:scale-95 transition-all ${user && user.id === selectedListing.ownerId ? 'bg-white/10 text-white/40 cursor-not-allowed' : 'bg-[#4CAF50] hover:bg-[#43a047] text-white'}`}
                         >
-                          <div className="scale-125"><Icons.Phone /></div> {user.id === selectedListing.ownerId ? 'Your Own Ad' : 'Call Owner'}
+                          <div className="scale-125"><Icons.Phone /></div> {user && user.id === selectedListing.ownerId ? 'Your Own Ad' : 'Call Owner'}
                         </a>
                         <button 
-                          onClick={() => { if(user.id !== selectedListing.ownerId) setIsChatOpen(true); }} 
-                          disabled={user.id === selectedListing.ownerId}
-                          className={`flex-1 py-6 px-10 rounded-3xl font-black uppercase text-[12px] tracking-[0.2em] transition-all ${user.id === selectedListing.ownerId ? 'bg-white/5 text-white/20 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20 text-white border border-white/20 active:scale-95'}`}
+                          onClick={() => { 
+                            if (!user) {
+                              setAuthMessage('Sign in to start a chat with the owner');
+                              setIsAuthOpen(true);
+                            } else if (user.id !== selectedListing.ownerId) {
+                              setIsChatOpen(true);
+                            }
+                          }} 
+                          disabled={user && user.id === selectedListing.ownerId}
+                          className={`flex-1 py-6 px-10 rounded-3xl font-black uppercase text-[12px] tracking-[0.2em] transition-all ${user && user.id === selectedListing.ownerId ? 'bg-white/5 text-white/20 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20 text-white border border-white/20 active:scale-95'}`}
                         >
                           Chat Now
                         </button>
@@ -486,7 +500,7 @@ const App: React.FC = () => {
                    </div>
                 </div>
                 
-                {user.id === selectedListing.ownerId && (
+                {user && user.id === selectedListing.ownerId && (
                   <button 
                     onClick={(e) => handleDeleteListing(e, selectedListing.id)}
                     className="w-full bg-red-50 text-red-500 py-5 rounded-3xl text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-3 border border-red-100/50 hover:bg-red-100 transition-colors"
