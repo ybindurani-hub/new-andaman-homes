@@ -8,7 +8,9 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
-  ConfirmationResult
+  ConfirmationResult,
+  setPersistence,
+  browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
   getFirestore, 
@@ -40,11 +42,17 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+// IMPORTANT: Set persistence to Local to avoid 'missing initial state' errors in WebViews
+setPersistence(auth, browserLocalPersistence)
+  .catch((error) => console.error("Auth persistence error:", error));
+
 const STORAGE_KEY = 'andaman_homes_local_listings';
 const FAVORITES_KEY = 'andaman_homes_favorites';
 
 export const loginWithGoogle = async (): Promise<User> => {
   try {
+    // Some mobile webviews block sign-in popups. 
+    // Popups are generally more reliable than Redirects in wraps like Median
     const result = await signInWithPopup(auth, googleProvider);
     return {
       id: result.user.uid,
@@ -54,7 +62,14 @@ export const loginWithGoogle = async (): Promise<User> => {
     };
   } catch (error: any) {
     if (error.code === 'auth/unauthorized-domain') {
-      throw new Error("This domain is not authorized. Please add it to Authorized Domains in Firebase Console.");
+      throw new Error("Domain not authorized in Firebase Console.");
+    }
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      throw new Error("Sign-in window was blocked. Please try Email or Phone login.");
+    }
+    // Handle the 'missing initial state' specific case
+    if (error.message.includes('missing initial state')) {
+      throw new Error("Storage access error. Please try Email login instead.");
     }
     throw error;
   }
