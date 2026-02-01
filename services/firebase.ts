@@ -1,17 +1,15 @@
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
   getAuth,
   setPersistence,
   browserLocalPersistence,
-  GoogleAuthProvider, 
-  signInWithRedirect,
-  getRedirectResult,
   signOut, 
   onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  updateProfile,
+  getRedirectResult
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
   getFirestore, 
@@ -19,6 +17,7 @@ import {
   addDoc, 
   getDocs, 
   query, 
+  where,
   orderBy,
   doc,
   setDoc,
@@ -30,7 +29,7 @@ import {
   onSnapshot,
   enableMultiTabIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { User, PropertyListing, ListingStatus, ChatMessage, ListingCategory, ParkingOption, PostedBy } from '../types.ts';
+import { User, PropertyListing, ListingStatus, ChatMessage } from '../types.ts';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCrJp2FYJeJ5S4cbynYcqG7q15rWoPxcDE",
@@ -41,82 +40,61 @@ const firebaseConfig = {
   appId: "1:563526116422:web:a4e84ae72b7c75ebdad647"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Critical: Set persistence to Local immediately for PWA/WebView stability
-setPersistence(auth, browserLocalPersistence)
-  .catch(err => console.error("Persistence configuration failed", err));
-
-// Enable offline persistence for Firestore to handle BSNL network drops
+setPersistence(auth, browserLocalPersistence).catch(err => console.warn("Persistence set failed", err));
 enableMultiTabIndexedDbPersistence(db).catch(() => {});
 
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ 
-  prompt: 'select_account',
-  // Helps some mobile browsers recognize the return intent
-  display: 'touch' 
-});
-
 /**
- * Handles the result of a Google Redirect sign-in.
- * Optimized for Vercel -> App transitions.
+ * Checks if a user exists in Firestore by their phone number.
+ * Used to enforce "Register First" rule.
  */
-export const handleAuthRedirect = async (): Promise<User | null> => {
+export const checkUserByPhone = async (phoneNumber: string): Promise<User | null> => {
   try {
-    // getRedirectResult resolves to null if no redirect occurred
-    const result = await getRedirectResult(auth);
-    
-    if (result?.user) {
-      const userData: User = {
-        id: result.user.uid,
-        name: result.user.displayName || 'Islander',
-        email: result.user.email || '',
-        photoURL: result.user.photoURL || undefined
-      };
-      
-      // Force immediate local sync before resolving to UI
-      localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
-      await syncUserToFirestore(userData);
-      return userData;
+    const q = query(collection(db, "users"), where("phoneNumber", "==", phoneNumber), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return { id: snap.docs[0].id, ...snap.docs[0].data() } as User;
     }
-  } catch (error: any) {
-    console.error("Auth Redirect Handshake Error:", error.code);
-    // Ignore cases where the user just cancelled or nothing happened
-    if (error.code !== 'auth/no-auth-event') {
-       throw error;
-    }
+  } catch (e) {
+    console.error("Check user error", e);
   }
   return null;
 };
 
-const syncUserToFirestore = async (userData: User) => {
+export const setupRecaptcha = (containerId: string) => {
+  if (!(window as any).recaptchaVerifier) {
+    (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+      size: 'invisible',
+      callback: () => {}
+    });
+  }
+  return (window as any).recaptchaVerifier;
+};
+
+export const sendOtp = async (phoneNumber: string, verifier: any) => {
+  return await signInWithPhoneNumber(auth, phoneNumber, verifier);
+};
+
+export const syncUserToFirestore = async (userData: User) => {
   try {
     const userRef = doc(db, "users", userData.id);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) {
-      await setDoc(userRef, { 
-        ...userData, 
-        createdAt: Date.now(),
-        lastLogin: Date.now()
-      });
-    } else {
-      await updateDoc(userRef, { 
-        name: userData.name, 
-        lastLogin: Date.now() 
-      });
-    }
+    await setDoc(userRef, { 
+      ...userData, 
+      lastLogin: Date.now(),
+      updatedAt: Date.now()
+    }, { merge: true });
+    localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
   } catch (e) {
-    // Fail gracefully for network/permission issues
-    console.warn("Firestore sync deferred (Offline mode active)");
+    console.warn("Firestore sync deferred", e);
   }
 };
 
 export const getUserData = async (userId: string): Promise<User | null> => {
   const cached = localStorage.getItem(`ah_user_${userId}`);
   if (cached) return JSON.parse(cached);
-
   try {
     const userDoc = await getDoc(doc(db, "users", userId));
     if (userDoc.exists()) {
@@ -130,32 +108,29 @@ export const getUserData = async (userId: string): Promise<User | null> => {
   return null;
 };
 
-export const loginWithGoogleRedirect = async () => {
-  // STRICT RULE: No Popup. 
-  // Redirect allows the browser to handle the Google UI in a full-screen context,
-  // which is much more reliable on mobile and low-bandwidth networks.
-  await signInWithRedirect(auth, googleProvider);
-};
-
-export const signUpWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
-  const result = await createUserWithEmailAndPassword(auth, email, pass);
-  await updateProfile(result.user, { displayName: name });
-  const userData = { id: result.user.uid, name, email };
-  await syncUserToFirestore(userData);
-  localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
-  return userData;
-};
-
-export const signInWithEmail = async (email: string, pass: string): Promise<User> => {
-  const result = await signInWithEmailAndPassword(auth, email, pass);
-  const userData = { 
-    id: result.user.uid, 
-    name: result.user.displayName || 'User', 
-    email: result.user.email || '' 
-  };
-  // Pre-cache to avoid secondary loading state
-  localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
-  return userData;
+// Added handleAuthRedirect export to fix App.tsx import error
+/**
+ * Handles the result of a sign-in redirect.
+ */
+export const handleAuthRedirect = async (): Promise<User | null> => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      const userData = await getUserData(result.user.uid);
+      if (userData) return userData;
+      
+      const newUser: User = {
+        id: result.user.uid,
+        name: result.user.displayName || 'Islander',
+        email: result.user.email || '',
+      };
+      await syncUserToFirestore(newUser);
+      return newUser;
+    }
+  } catch (err) {
+    console.error("Redirect Auth Error", err);
+  }
+  return null;
 };
 
 export const logout = async () => {
@@ -168,29 +143,20 @@ export const logout = async () => {
 export const updateUserProfile = async (userId: string, data: Partial<User>): Promise<void> => {
   const userRef = doc(db, "users", userId);
   await updateDoc(userRef, data as any);
-  
-  const cachedKey = `ah_user_${userId}`;
-  const cached = localStorage.getItem(cachedKey);
-  if (cached) {
-    const user = JSON.parse(cached);
-    localStorage.setItem(cachedKey, JSON.stringify({ ...user, ...data }));
-  }
 };
 
 export const getAuthErrorMessage = (errorCode: string): string => {
   switch (errorCode) {
-    case 'auth/invalid-email': return 'Invalid email format.';
-    case 'auth/user-not-found': return 'Account not found.';
-    case 'auth/wrong-password': return 'Incorrect password.';
-    case 'auth/email-already-in-use': return 'Email already registered.';
-    case 'auth/network-request-failed': return 'Island signal lost. Reconnecting...';
-    case 'auth/too-many-requests': return 'Too many attempts. Wait a moment.';
-    case 'auth/redirect-cancelled-by-user': return 'Login cancelled.';
-    default: return 'Authentication error. Please try again.';
+    case 'auth/invalid-phone-number': return 'Invalid phone number format.';
+    case 'auth/too-many-requests': return 'Too many attempts. Try again later.';
+    case 'auth/code-expired': return 'OTP has expired. Resend.';
+    case 'auth/invalid-verification-code': return 'Incorrect OTP entered.';
+    case 'auth/network-request-failed': return 'Network error. Check signal.';
+    case 'user-not-found': return 'Mobile not registered. Please Sign Up first.';
+    case 'user-exists': return 'Mobile already registered. Please Login.';
+    default: return 'Authentication failed. Please try again.';
   }
 };
-
-// --- DATA METHODS ---
 
 export const getListings = async (lastDoc?: any, pageSize = 8): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
   try {
@@ -223,7 +189,7 @@ export const updateListingStatus = async (id: string, status: ListingStatus) => 
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
   const key = `ah_favs_${userId}`;
   const favs = JSON.parse(localStorage.getItem(key) || '[]');
-  const next = favs.includes(listingId) ? favs.filter((i: string) => i !== listingId) : [...favs, listingId];
+  const next = favs.includes(listingId) ? favs.filter((i: string = "") => i !== listingId) : [...favs, listingId];
   localStorage.setItem(key, JSON.stringify(next));
   return next;
 };

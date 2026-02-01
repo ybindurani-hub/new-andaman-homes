@@ -1,3 +1,4 @@
+
 export enum ListingCategory {
   HOUSE_RENT = 'House Rent',
   HOUSE_SALE = 'House Sale',

@@ -24,7 +24,7 @@ import ChatOverlay from './components/ChatOverlay.tsx';
 import LocationOverlay from './components/LocationOverlay.tsx';
 import Toast from './components/Toast.tsx';
 import SettingsScreen from './components/SettingsScreen.tsx';
-import { Icons, ANDAMAN_LOCATIONS } from './constants.tsx';
+import { Icons } from './constants.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -70,7 +70,7 @@ const App: React.FC = () => {
       setLastDoc(result?.lastDoc || null);
       setHasMore(data.length === PAGE_SIZE);
     } catch (err) {
-      console.error("Listing Fetch Error:", err);
+      console.warn("Marketplace fetch deferred");
     } finally {
       setLoading(false);
     }
@@ -90,33 +90,36 @@ const App: React.FC = () => {
         setHasMore(false);
       }
     } catch (err) {
-       console.error("Fetch More Error:", err);
+       console.error("Pagination Error:", err);
     } finally {
       setLoadingMore(false);
     }
   }, [hasMore, loadingMore, lastDoc]);
 
   useEffect(() => {
-    const splashTimer = setTimeout(() => setShowSplash(false), 2000);
+    const splashTimer = setTimeout(() => setShowSplash(false), 1500);
     
-    const initApp = async () => {
+    // Auth Initialization Logic - Highly Defensive
+    const initAuthFlow = async () => {
       setIsHandshaking(true);
       try {
+        // handleAuthRedirect in firebase.ts is now safe and won't throw
         const redirectUser = await handleAuthRedirect();
         if (redirectUser) {
           setUser(redirectUser);
-          setToast({ message: `Success! Welcome, ${redirectUser.name}`, type: 'success' });
-          setIsAuthOpen(false);
+          setToast({ message: `Welcome back, ${redirectUser.name}`, type: 'success' });
         }
-      } catch (err: any) {
-        console.error("Redirect Handler Error:", err);
+      } catch (err) {
+        // Silently catch any stray errors that bubbled up
+        console.error("Auth Handshake caught in App:", err);
       } finally {
         setIsHandshaking(false);
       }
 
+      // Standard Auth State Listener
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        if (firebaseUser) {
-          try {
+        try {
+          if (firebaseUser) {
             const profile = await getUserData(firebaseUser.uid);
             const userData = profile || { 
               id: firebaseUser.uid, 
@@ -125,24 +128,22 @@ const App: React.FC = () => {
             };
             setUser(userData);
             getFavorites(firebaseUser.uid).then(setFavorites).catch(() => {});
-          } catch (e) {
-            console.error("Profile Fetch Error:", e);
+          } else {
+            setUser(null);
+            setFavorites([]);
           }
-        } else {
-          setUser(null);
-          setFavorites([]);
-          if (['post', 'profile', 'settings', 'myads', 'saved'].includes(currentView)) {
-            setCurrentView('home');
-          }
+        } catch (e) {
+          console.warn("Auth state observer error", e);
+        } finally {
+          setAuthInitializing(false);
         }
-        setAuthInitializing(false);
       });
 
       fetchInitialListings();
       return unsubscribe;
     };
 
-    const cleanup = initApp();
+    const cleanup = initAuthFlow();
     return () => {
       clearTimeout(splashTimer);
       cleanup.then(unsub => unsub?.());
@@ -201,12 +202,12 @@ const App: React.FC = () => {
       setEditingListing(null);
       setCurrentView('home');
     } catch(err) {
-      setToast({ message: "Action failed. Check signal.", type: 'error' });
+      setToast({ message: "Failed to post. Check connection.", type: 'error' });
     }
   }, [user, editingListing]);
 
   const handleDeleteAd = async (listingId: string) => {
-    if (!window.confirm("Confirm deletion?")) return;
+    if (!window.confirm("Delete this listing?")) return;
     try {
       await deleteListing(listingId);
       setListings(p => p.filter(l => l.id !== listingId));
@@ -240,7 +241,7 @@ const App: React.FC = () => {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
         <div className="w-16 h-16 bg-slate-900 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl animate-bounce shadow-2xl">A</div>
         <p className="mt-8 text-[9px] font-black uppercase text-slate-400 tracking-[0.4em] animate-pulse">
-          {isHandshaking ? 'Verifying Island Session...' : 'Andaman Homes'}
+          {isHandshaking ? 'Handshaking Island Servers...' : 'Andaman Homes'}
         </p>
       </div>
     );
@@ -292,7 +293,7 @@ const App: React.FC = () => {
               
               {hasMore && filteredListings.length > 0 && !loading && (
                 <button onClick={fetchMoreListings} disabled={loadingMore} className="w-full mt-8 py-5 rounded-2xl border-2 border-dashed border-slate-200 font-black text-[9px] uppercase tracking-widest text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-all">
-                  {loadingMore ? 'Connecting...' : 'Fetch More Properties'}
+                  {loadingMore ? 'Syncing...' : 'Fetch More Properties'}
                 </button>
               )}
             </div>
@@ -355,7 +356,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 mb-8">
-                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Property Bio</h3>
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Property Bio</h3>
                    <p className="text-slate-600 leading-relaxed font-medium text-sm">{selectedListing.description}</p>
                 </div>
                 <div className="flex gap-4">
