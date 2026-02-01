@@ -62,7 +62,7 @@ export interface User {
   photoURL?: string;
 }
 
-export type ViewState = 'home' | 'post' | 'details' | 'profile' | 'saved' | 'myads';
+export type ViewState = 'home' | 'post' | 'details' | 'profile' | 'saved' | 'myads' | 'settings' | 'auth';
 
 export interface ChatMessage {
   id: string;

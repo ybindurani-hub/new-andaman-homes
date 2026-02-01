@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { auth, getListings, addListing, logout, deleteListing, updateListingStatus } from '../services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -7,6 +8,8 @@ import ListingCard from './ListingCard.tsx';
 import ListingForm from './ListingForm.tsx';
 import AuthOverlay from './AuthOverlay.tsx';
 import ChatOverlay from './ChatOverlay.tsx';
+// Fix: Import LocationOverlay as it's needed for the location functionality
+import LocationOverlay from './LocationOverlay.tsx';
 import { ANDAMAN_LOCATIONS, Icons } from '../constants.tsx';
 
 const App: React.FC = () => {
@@ -16,11 +19,31 @@ const App: React.FC = () => {
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Fix: Added location-related state required by Navbar
+  const [isLocationOpen, setIsLocationOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<string>('Port Blair');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterLocation, setFilterLocation] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Fixed: Added timeAgo utility to calculate relative time for ListingCard
+  const getTimeAgo = (date: number) => {
+    const seconds = Math.floor((Date.now() - date) / 1000);
+    if (seconds < 60) return "Just now";
+    let interval = Math.floor(seconds / 31536000);
+    if (interval >= 1) return interval + "y ago";
+    interval = Math.floor(seconds / 2592000);
+    if (interval >= 1) return interval + "mo ago";
+    interval = Math.floor(seconds / 86400);
+    if (interval >= 1) return interval + "d ago";
+    interval = Math.floor(seconds / 3600);
+    if (interval >= 1) return interval + "h ago";
+    interval = Math.floor(seconds / 60);
+    if (interval >= 1) return interval + "m ago";
+    return Math.floor(seconds) + "s ago";
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -42,7 +65,8 @@ const App: React.FC = () => {
     setLoading(true);
     try {
       const data = await getListings();
-      setListings(data);
+      // Fix: getListings returns an object { listings, lastDoc }, so we extract data.listings
+      setListings(data.listings);
     } catch (err) {
       console.error("Error fetching listings:", err);
     } finally {
@@ -175,6 +199,8 @@ const App: React.FC = () => {
             <ListingCard 
               key={listing.id} 
               listing={listing} 
+              // Fixed: Pass required timeAgo prop
+              timeAgo={getTimeAgo(listing.postedAt)}
               onClick={(l) => {
                 setSelectedListing(l);
                 setCurrentView('details');
@@ -324,10 +350,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Fix: Navbar call must match its property definitions (onViewChange, onOpenLocation, currentLocation) */}
       <Navbar 
-        user={user} 
         onViewChange={setCurrentView} 
-        onAuthOpen={() => setIsAuthOpen(true)} 
+        onOpenLocation={() => setIsLocationOpen(true)}
+        currentLocation={selectedLocation}
       />
       
       <main>
@@ -374,6 +401,8 @@ const App: React.FC = () => {
                     <ListingCard 
                       key={listing.id} 
                       listing={listing} 
+                      // Fixed: Pass required timeAgo prop
+                      timeAgo={getTimeAgo(listing.postedAt)}
                       onClick={(l) => {
                         setSelectedListing(l);
                         setCurrentView('details');
@@ -391,6 +420,14 @@ const App: React.FC = () => {
         isOpen={isAuthOpen} 
         onClose={() => setIsAuthOpen(false)} 
         onUserSet={(user) => setUser(user)} 
+      />
+
+      {/* Added LocationOverlay to handle location selection functionality */}
+      <LocationOverlay 
+        isOpen={isLocationOpen} 
+        onClose={() => setIsLocationOpen(false)} 
+        onSelect={setSelectedLocation} 
+        currentLocation={selectedLocation} 
       />
 
       {selectedListing && user && (
