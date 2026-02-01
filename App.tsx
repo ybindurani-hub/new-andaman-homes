@@ -15,7 +15,7 @@ import {
   handleAuthRedirect 
 } from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { User, PropertyListing, ViewState, ListingStatus, ListingCategory } from './types.ts';
+import { User, PropertyListing, ViewState, ListingStatus } from './types.ts';
 import Navbar from './components/Navbar.tsx';
 import ListingCard from './components/ListingCard.tsx';
 import ListingForm from './components/ListingForm.tsx';
@@ -24,7 +24,7 @@ import ChatOverlay from './components/ChatOverlay.tsx';
 import LocationOverlay from './components/LocationOverlay.tsx';
 import Toast from './components/Toast.tsx';
 import SettingsScreen from './components/SettingsScreen.tsx';
-import { Icons, ANDAMAN_LOCATIONS } from './constants.tsx';
+import { Icons } from './constants.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const PAGE_SIZE = 12;
 
   const getTimeAgo = useCallback((date: number) => {
+    if (!date) return "Recently";
     const seconds = Math.floor((Date.now() - date) / 1000);
     if (seconds < 60) return "Just now";
     let interval = Math.floor(seconds / 3600);
@@ -63,12 +64,13 @@ const App: React.FC = () => {
   const fetchInitialListings = useCallback(async () => {
     setLoading(true);
     try {
-      const { listings: data, lastDoc: last } = await getListings(undefined, PAGE_SIZE);
+      const result = await getListings(undefined, PAGE_SIZE);
+      const data = result?.listings || [];
       setListings(data);
-      setLastDoc(last);
+      setLastDoc(result?.lastDoc || null);
       setHasMore(data.length === PAGE_SIZE);
     } catch (err) {
-      console.error(err);
+      console.error("Listing Fetch Error:", err);
     } finally {
       setLoading(false);
     }
@@ -78,16 +80,17 @@ const App: React.FC = () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      const { listings: data, lastDoc: last } = await getListings(lastDoc, PAGE_SIZE);
+      const result = await getListings(lastDoc, PAGE_SIZE);
+      const data = result?.listings || [];
       if (data.length > 0) {
         setListings(prev => [...prev, ...data]);
-        setLastDoc(last);
+        setLastDoc(result?.lastDoc || null);
         setHasMore(data.length === PAGE_SIZE);
       } else {
         setHasMore(false);
       }
     } catch (err) {
-       console.error(err);
+       console.error("Fetch More Error:", err);
     } finally {
       setLoadingMore(false);
     }
@@ -102,29 +105,35 @@ const App: React.FC = () => {
         const redirectUser = await handleAuthRedirect();
         if (redirectUser) {
           setUser(redirectUser);
-          setToast({ message: `Success! Welcome back, ${redirectUser.name}`, type: 'success' });
+          setToast({ message: `Success! Welcome, ${redirectUser.name}`, type: 'success' });
           setIsAuthOpen(false);
         }
       } catch (err: any) {
-        console.error(err);
+        console.error("Redirect Handler Error:", err);
       } finally {
         setIsHandshaking(false);
       }
 
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
-          const profile = await getUserData(firebaseUser.uid);
-          const userData = profile || { 
-            id: firebaseUser.uid, 
-            name: firebaseUser.displayName || 'Islander', 
-            email: firebaseUser.email || '' 
-          };
-          setUser(userData);
-          getFavorites(firebaseUser.uid).then(setFavorites).catch(() => {});
+          try {
+            const profile = await getUserData(firebaseUser.uid);
+            const userData = profile || { 
+              id: firebaseUser.uid, 
+              name: firebaseUser.displayName || 'Islander', 
+              email: firebaseUser.email || '' 
+            };
+            setUser(userData);
+            getFavorites(firebaseUser.uid).then(setFavorites).catch(() => {});
+          } catch (e) {
+            console.error("Profile Fetch Error:", e);
+          }
         } else {
           setUser(null);
           setFavorites([]);
-          if (['post', 'profile', 'settings'].includes(currentView)) setCurrentView('home');
+          if (['post', 'profile', 'settings', 'myads', 'saved'].includes(currentView)) {
+            setCurrentView('home');
+          }
         }
         setAuthInitializing(false);
       });
@@ -143,17 +152,32 @@ const App: React.FC = () => {
   const handleFavoriteToggle = useCallback(async (e: React.MouseEvent, listingId: string) => {
     e.stopPropagation();
     if (!user) { setIsAuthOpen(true); return; }
-    const next = await toggleFavorite(user.id, listingId);
-    setFavorites(next);
-    setToast({ message: next.includes(listingId) ? "Shortlisted" : "Removed", type: 'success' });
+    try {
+      const next = await toggleFavorite(user.id, listingId);
+      setFavorites(next);
+      setToast({ message: next.includes(listingId) ? "Shortlisted" : "Removed", type: 'success' });
+    } catch (e) {
+      setToast({ message: "Action failed", type: 'error' });
+    }
   }, [user]);
 
   const filteredListings = useMemo(() => {
+    if (!listings) return [];
     return listings.filter(l => {
       const q = searchQuery.toLowerCase();
-      const match = (l.title || '').toLowerCase().includes(q) || (l.location || '').toLowerCase().includes(q);
-      const cat = filterType === 'ALL' || (filterType === 'RENT' && l.category.toLowerCase().includes('rent')) || (filterType === 'SALE' && l.category.toLowerCase().includes('sale'));
-      return match && cat;
+      const title = l?.title?.toLowerCase() || '';
+      const location = l?.location?.toLowerCase() || '';
+      const category = l?.category?.toLowerCase() || '';
+      
+      const match = title.includes(q) || location.includes(q);
+      const isRent = category.includes('rent');
+      const isSale = category.includes('sale');
+      
+      const catMatch = filterType === 'ALL' || 
+                       (filterType === 'RENT' && isRent) || 
+                       (filterType === 'SALE' && isSale);
+      
+      return match && catMatch;
     });
   }, [listings, searchQuery, filterType]);
 
@@ -177,12 +201,12 @@ const App: React.FC = () => {
       setEditingListing(null);
       setCurrentView('home');
     } catch(err) {
-      setToast({ message: "Transaction failed. Check signal.", type: 'error' });
+      setToast({ message: "Action failed. Check signal.", type: 'error' });
     }
   }, [user, editingListing]);
 
   const handleDeleteAd = async (listingId: string) => {
-    if (!window.confirm("Confirm deletion of this island asset?")) return;
+    if (!window.confirm("Confirm deletion?")) return;
     try {
       await deleteListing(listingId);
       setListings(p => p.filter(l => l.id !== listingId));
@@ -259,6 +283,7 @@ const App: React.FC = () => {
                       onFavoriteToggle={handleFavoriteToggle} 
                       isOwner={user?.id === l.ownerId} 
                       onClick={handleListingClick} 
+                      onEdit={(e, list) => { e.stopPropagation(); handleEditAd(list); }}
                       timeAgo={getTimeAgo(l.postedAt)} 
                     />
                   ))}
@@ -314,7 +339,7 @@ const App: React.FC = () => {
              </div>
              
              <div className="rounded-[2.5rem] overflow-hidden bg-slate-100 aspect-video mb-8 shadow-2xl border border-white">
-               <img src={selectedListing.imageUrls[0]} className="w-full h-full object-cover" alt="" />
+               <img src={selectedListing?.imageUrls?.[0] || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=800'} className="w-full h-full object-cover" alt="" />
              </div>
              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
                 <div className="flex justify-between items-start mb-8">
@@ -326,7 +351,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="bg-slate-900 text-white px-8 py-5 rounded-3xl text-center shadow-xl">
                     <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Asking Price</p>
-                    <p className="text-2xl font-black">₹{selectedListing.price.toLocaleString()}</p>
+                    <p className="text-2xl font-black">₹{selectedListing?.price?.toLocaleString() || 'N/A'}</p>
                   </div>
                 </div>
                 <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 mb-8">

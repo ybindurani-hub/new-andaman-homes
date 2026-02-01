@@ -25,16 +25,18 @@ const ListingCard: React.FC<ListingCardProps> = memo(({
   timeAgo
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const isRent = listing.category.toLowerCase().includes('rent');
-  const isSoldOrRented = listing.status !== ListingStatus.ACTIVE;
+  const category = listing?.category || '';
+  const isRent = category.toLowerCase().includes('rent');
+  const isSoldOrRented = listing?.status !== ListingStatus.ACTIVE;
   
   const formatPrice = (price: number) => {
+    if (price === undefined || price === null) return 'N/A';
     return new Intl.NumberFormat('en-IN', {
       maximumFractionDigits: 0
     }).format(price);
   };
 
-  const mainImage = listing.imageUrls && listing.imageUrls.length > 0 ? listing.imageUrls[0] : null;
+  const mainImage = listing?.imageUrls && listing.imageUrls.length > 0 ? listing.imageUrls[0] : null;
 
   return (
     <div 
@@ -46,7 +48,7 @@ const ListingCard: React.FC<ListingCardProps> = memo(({
         {mainImage ? (
           <img 
             src={mainImage} 
-            alt={listing.title}
+            alt={listing?.title || 'Property'}
             onLoad={() => setImageLoaded(true)}
             className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${isSoldOrRented ? 'grayscale' : ''}`}
           />
@@ -101,22 +103,22 @@ const ListingCard: React.FC<ListingCardProps> = memo(({
       <div className="p-3 flex flex-col flex-grow">
         <div className="mb-1">
           <h3 className="text-base font-black text-slate-900 tracking-tight">
-            ₹ {formatPrice(listing.price)}
+            ₹ {formatPrice(listing?.price)}
           </h3>
           <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
-            {listing.title}
+            {listing?.title || 'Unnamed Property'}
           </p>
         </div>
 
         {/* Specs Pills */}
         <div className="flex flex-wrap gap-1.5 my-2">
-          {listing.bhk && (
+          {listing?.bhk && (
             <div className="bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
               <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{listing.bhk}</span>
             </div>
           )}
           <div className="bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{listing.area} {listing.areaUnit}</span>
+            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{listing?.area || '0'} {listing?.areaUnit || 'sq.ft'}</span>
           </div>
         </div>
 
@@ -124,7 +126,7 @@ const ListingCard: React.FC<ListingCardProps> = memo(({
         <div className="mt-auto pt-2 border-t border-slate-50 flex justify-between items-center text-slate-400">
           <div className="flex items-center gap-1 min-w-0">
             <div className="flex-shrink-0 text-emerald-500"><Icons.Location /></div>
-            <span className="text-[8px] font-black uppercase tracking-widest truncate">{listing.location.split(',')[0]}</span>
+            <span className="text-[8px] font-black uppercase tracking-widest truncate">{listing?.location?.split(',')?.[0] || 'Unknown'}</span>
           </div>
           <span className="text-[8px] font-black uppercase tracking-widest flex-shrink-0 ml-2">
             {timeAgo.replace(' ago', '').toUpperCase()}
