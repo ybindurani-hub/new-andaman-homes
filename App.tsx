@@ -24,7 +24,7 @@ import ChatOverlay from './components/ChatOverlay.tsx';
 import LocationOverlay from './components/LocationOverlay.tsx';
 import Toast from './components/Toast.tsx';
 import SettingsScreen from './components/SettingsScreen.tsx';
-import { Icons } from './constants.tsx';
+import { Icons, ANDAMAN_LOCATIONS } from './constants.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -258,7 +258,7 @@ const App: React.FC = () => {
                 <Icons.Search />
                 <input 
                   className="bg-transparent outline-none ml-2 text-xs font-bold w-full placeholder:text-slate-400"
-                  placeholder="Houses, shops or land..."
+                  placeholder="House, Shop, Land..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -268,13 +268,13 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
               {loading ? (
                 <div className="py-24 flex flex-col items-center gap-4">
                   <div className="w-8 h-8 border-[3px] border-slate-100 border-t-emerald-500 rounded-full animate-spin"></div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {filteredListings.map(l => (
                     <ListingCard 
                       key={l.id} 
