@@ -1,9 +1,21 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-// Fix: Removed handleRedirectResultSafe from imports as it is not exported by firebase.ts and not used in this file.
-import { auth, getListings, addListing, logout, getFavorites, toggleFavorite, getAuthErrorMessage, logger, getUserData } from './services/firebase.ts';
+import { 
+  auth, 
+  getListings, 
+  addListing, 
+  updateListing,
+  logout, 
+  deleteListing,
+  updateListingStatus,
+  getFavorites, 
+  toggleFavorite, 
+  getAuthErrorMessage, 
+  getUserData,
+  handleAuthRedirect 
+} from './services/firebase.ts';
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { User, PropertyListing, ViewState } from './types.ts';
+import { User, PropertyListing, ViewState, ListingStatus, ListingCategory } from './types.ts';
 import Navbar from './components/Navbar.tsx';
 import ListingCard from './components/ListingCard.tsx';
 import ListingForm from './components/ListingForm.tsx';
@@ -12,7 +24,7 @@ import ChatOverlay from './components/ChatOverlay.tsx';
 import LocationOverlay from './components/LocationOverlay.tsx';
 import Toast from './components/Toast.tsx';
 import SettingsScreen from './components/SettingsScreen.tsx';
-import { Icons } from './constants.tsx';
+import { Icons, ANDAMAN_LOCATIONS } from './constants.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -22,21 +34,23 @@ const App: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [currentView, setCurrentView] = useState<ViewState>('home');
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
+  const [editingListing, setEditingListing] = useState<PropertyListing | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'RENT' | 'SALE'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [authInitializing, setAuthInitializing] = useState(true);
+  const [isHandshaking, setIsHandshaking] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string>('Port Blair');
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
-  const PAGE_SIZE = 8;
+  const PAGE_SIZE = 12;
 
-  const timeAgo = useCallback((date: number) => {
+  const getTimeAgo = useCallback((date: number) => {
     const seconds = Math.floor((Date.now() - date) / 1000);
     if (seconds < 60) return "Just now";
     let interval = Math.floor(seconds / 3600);
@@ -54,7 +68,7 @@ const App: React.FC = () => {
       setLastDoc(last);
       setHasMore(data.length === PAGE_SIZE);
     } catch (err) {
-      setToast({ message: "Network unstable. Using cached feed.", type: 'info' });
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -73,7 +87,7 @@ const App: React.FC = () => {
         setHasMore(false);
       }
     } catch (err) {
-       setToast({ message: "Connection lost.", type: 'error' });
+       console.error(err);
     } finally {
       setLoadingMore(false);
     }
@@ -83,22 +97,47 @@ const App: React.FC = () => {
     const splashTimer = setTimeout(() => setShowSplash(false), 2000);
     
     const initApp = async () => {
-      onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsHandshaking(true);
+      try {
+        const redirectUser = await handleAuthRedirect();
+        if (redirectUser) {
+          setUser(redirectUser);
+          setToast({ message: `Success! Welcome back, ${redirectUser.name}`, type: 'success' });
+          setIsAuthOpen(false);
+        }
+      } catch (err: any) {
+        console.error(err);
+      } finally {
+        setIsHandshaking(false);
+      }
+
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
           const profile = await getUserData(firebaseUser.uid);
-          setUser(profile || { id: firebaseUser.uid, name: firebaseUser.displayName || 'Islander', email: firebaseUser.email || '' });
+          const userData = profile || { 
+            id: firebaseUser.uid, 
+            name: firebaseUser.displayName || 'Islander', 
+            email: firebaseUser.email || '' 
+          };
+          setUser(userData);
           getFavorites(firebaseUser.uid).then(setFavorites).catch(() => {});
         } else {
           setUser(null);
           setFavorites([]);
           if (['post', 'profile', 'settings'].includes(currentView)) setCurrentView('home');
         }
+        setAuthInitializing(false);
       });
-      fetchInitialListings();
-    };
-    initApp();
 
-    return () => clearTimeout(splashTimer);
+      fetchInitialListings();
+      return unsubscribe;
+    };
+
+    const cleanup = initApp();
+    return () => {
+      clearTimeout(splashTimer);
+      cleanup.then(unsub => unsub?.());
+    };
   }, []);
 
   const handleFavoriteToggle = useCallback(async (e: React.MouseEvent, listingId: string) => {
@@ -106,7 +145,7 @@ const App: React.FC = () => {
     if (!user) { setIsAuthOpen(true); return; }
     const next = await toggleFavorite(user.id, listingId);
     setFavorites(next);
-    setToast({ message: next.includes(listingId) ? "Saved to shortlist" : "Removed from shortlist", type: 'success' });
+    setToast({ message: next.includes(listingId) ? "Shortlisted" : "Removed", type: 'success' });
   }, [user]);
 
   const filteredListings = useMemo(() => {
@@ -126,104 +165,183 @@ const App: React.FC = () => {
   const handlePostSubmit = useCallback(async (data: any) => {
     if(!user) { setIsAuthOpen(true); return; }
     try {
-      const nl = await addListing(data, user);
-      setListings(p => [nl, ...p]);
+      if (editingListing) {
+        await updateListing(editingListing.id, data);
+        setListings(p => p.map(l => l.id === editingListing.id ? { ...l, ...data } : l));
+        setToast({ message: "Update successful!", type: 'success' });
+      } else {
+        const nl = await addListing(data, user);
+        setListings(p => [nl, ...p]);
+        setToast({ message: "Property listed live!", type: 'success' });
+      }
+      setEditingListing(null);
       setCurrentView('home');
-      setToast({ message: "Listed successfully!", type: 'success' });
     } catch(err) {
-      setToast({ message: "Posting failed.", type: 'error' });
+      setToast({ message: "Transaction failed. Check signal.", type: 'error' });
     }
-  }, [user]);
+  }, [user, editingListing]);
 
-  if (showSplash) {
+  const handleDeleteAd = async (listingId: string) => {
+    if (!window.confirm("Confirm deletion of this island asset?")) return;
+    try {
+      await deleteListing(listingId);
+      setListings(p => p.filter(l => l.id !== listingId));
+      setCurrentView('home');
+      setToast({ message: "Property removed.", type: 'success' });
+    } catch (err) {
+      setToast({ message: "Delete failed.", type: 'error' });
+    }
+  };
+
+  const handleStatusUpdate = async (listingId: string, status: ListingStatus) => {
+    try {
+      await updateListingStatus(listingId, status);
+      setListings(p => p.map(l => l.id === listingId ? { ...l, status } : l));
+      if (selectedListing?.id === listingId) {
+        setSelectedListing(prev => prev ? { ...prev, status } : null);
+      }
+      setToast({ message: `Marked as ${status}`, type: 'success' });
+    } catch (err) {
+      setToast({ message: "Status update failed.", type: 'error' });
+    }
+  };
+
+  const handleEditAd = (listing: PropertyListing) => {
+    setEditingListing(listing);
+    setCurrentView('post');
+  };
+
+  if (showSplash || isHandshaking || authInitializing) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-white">
-        <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center text-white font-black text-3xl animate-bounce shadow-2xl">A</div>
-        <h1 className="mt-8 text-2xl font-black text-slate-900 tracking-tighter">Andaman<span className="text-emerald-500">Homes</span></h1>
-        <div className="mt-4 w-48 h-1 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-emerald-500 w-1/3 animate-shimmer"></div>
-        </div>
-        <style>{`@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } } .animate-shimmer { animation: shimmer 1.5s infinite linear; }`}</style>
+        <div className="w-16 h-16 bg-slate-900 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl animate-bounce shadow-2xl">A</div>
+        <p className="mt-8 text-[9px] font-black uppercase text-slate-400 tracking-[0.4em] animate-pulse">
+          {isHandshaking ? 'Verifying Island Session...' : 'Andaman Homes'}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 selection:bg-emerald-100">
+    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-emerald-100">
       <Navbar onViewChange={setCurrentView} onOpenLocation={() => setIsLocationOpen(true)} currentLocation={selectedLocation} />
       
-      <main className="max-w-4xl mx-auto px-4">
+      <main className="max-w-4xl mx-auto">
         {currentView === 'home' && (
-          <div className="pb-40 pt-4">
-            <div className="bg-slate-50 rounded-[2.5rem] p-8 mb-8 border border-slate-100">
-               <h2 className="text-3xl font-black mb-6 leading-tight">Find your next<br/><span className="text-emerald-500">island home.</span></h2>
-               <div className="relative">
-                  <div className="absolute inset-y-0 left-5 flex items-center text-slate-300"><Icons.Search /></div>
-                  <input 
-                    type="text" placeholder="Search locality..." 
-                    className="w-full bg-white border border-slate-100 rounded-2xl py-4 pl-14 pr-6 outline-none focus:border-emerald-500 font-bold text-slate-700 shadow-sm"
-                    value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-               </div>
-               <div className="flex gap-2 mt-6 overflow-x-auto no-scrollbar">
-                {(['ALL', 'RENT', 'SALE'] as const).map(t => (
-                  <button key={t} onClick={() => setFilterType(t)} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${filterType === t ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-400 border-slate-100'}`}>{t}</button>
-                ))}
+          <div className="pb-40">
+            <div className="sticky top-[72px] z-[1000] bg-white/80 backdrop-blur-md px-4 py-3 border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar">
+              <div className="flex-grow flex items-center bg-slate-100 rounded-xl px-4 py-2.5 min-w-[180px]">
+                <Icons.Search />
+                <input 
+                  className="bg-transparent outline-none ml-2 text-xs font-bold w-full placeholder:text-slate-400"
+                  placeholder="Houses, shops or land..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
+              {(['ALL', 'RENT', 'SALE'] as const).map(t => (
+                <button key={t} onClick={() => setFilterType(t)} className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border flex-shrink-0 transition-all ${filterType === t ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-400 border-slate-100'}`}>{t}</button>
+              ))}
             </div>
 
-            {loading ? (
-              <div className="py-20 text-center animate-pulse">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Gathering Listings...</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {filteredListings.map(l => (
-                  <ListingCard key={l.id} listing={l} isFavorited={favorites.includes(l.id)} onFavoriteToggle={handleFavoriteToggle} isOwner={user?.id === l.ownerId} onClick={handleListingClick} timeAgo={timeAgo(l.postedAt)} />
-                ))}
-              </div>
-            )}
-            
-            {hasMore && listings.length > 0 && (
-              <button onClick={fetchMoreListings} disabled={loadingMore} className="w-full mt-10 py-5 rounded-2xl border-2 border-dashed border-slate-100 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:border-emerald-200 hover:text-emerald-500 transition-all">
-                {loadingMore ? 'Syncing...' : 'Load More Properties'}
-              </button>
-            )}
+            <div className="p-4">
+              {loading ? (
+                <div className="py-24 flex flex-col items-center gap-4">
+                  <div className="w-8 h-8 border-[3px] border-slate-100 border-t-emerald-500 rounded-full animate-spin"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {filteredListings.map(l => (
+                    <ListingCard 
+                      key={l.id} 
+                      listing={l} 
+                      isFavorited={favorites.includes(l.id)} 
+                      onFavoriteToggle={handleFavoriteToggle} 
+                      isOwner={user?.id === l.ownerId} 
+                      onClick={handleListingClick} 
+                      timeAgo={getTimeAgo(l.postedAt)} 
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {hasMore && filteredListings.length > 0 && !loading && (
+                <button onClick={fetchMoreListings} disabled={loadingMore} className="w-full mt-8 py-5 rounded-2xl border-2 border-dashed border-slate-200 font-black text-[9px] uppercase tracking-widest text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-all">
+                  {loadingMore ? 'Connecting...' : 'Fetch More Properties'}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {currentView === 'post' && <ListingForm onSubmit={handlePostSubmit} onCancel={() => setCurrentView('home')} />}
+        {currentView === 'post' && (
+          <ListingForm 
+            onSubmit={handlePostSubmit} 
+            onCancel={() => { setEditingListing(null); setCurrentView('home'); }} 
+            initialData={editingListing || undefined}
+          />
+        )}
 
         {currentView === 'details' && selectedListing && (
-          <div className="pb-40 pt-6 animate-in fade-in duration-500">
-             <button onClick={() => setCurrentView('home')} className="mb-6 flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">← Back</button>
-             <div className="rounded-[2.5rem] overflow-hidden bg-slate-100 aspect-video mb-8 shadow-xl">
+          <div className="pb-40 pt-6 px-4 animate-in fade-in duration-500">
+             <div className="flex justify-between items-center mb-6">
+                <button onClick={() => setCurrentView('home')} className="flex items-center gap-2 text-[9px] font-black uppercase text-slate-400 tracking-widest group">
+                  <span className="group-hover:-translate-x-1 transition-transform">←</span> Back
+                </button>
+                {user?.id === selectedListing.ownerId && (
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleEditAd(selectedListing)}
+                      className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      Edit
+                    </button>
+                    <select 
+                      className="bg-white border border-slate-200 px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none"
+                      value={selectedListing.status}
+                      onChange={(e) => handleStatusUpdate(selectedListing.id, e.target.value as ListingStatus)}
+                    >
+                      {Object.values(ListingStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button 
+                      onClick={() => handleDeleteAd(selectedListing.id)}
+                      className="bg-rose-50 text-rose-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-100 flex items-center gap-2"
+                    >
+                      <Icons.Trash />
+                    </button>
+                  </div>
+                )}
+             </div>
+             
+             <div className="rounded-[2.5rem] overflow-hidden bg-slate-100 aspect-video mb-8 shadow-2xl border border-white">
                <img src={selectedListing.imageUrls[0]} className="w-full h-full object-cover" alt="" />
              </div>
-             <div className="px-2">
-                <div className="flex justify-between items-start mb-6">
+             <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                <div className="flex justify-between items-start mb-8">
                   <div>
-                    <h2 className="text-3xl font-black mb-2">{selectedListing.title}</h2>
-                    <p className="flex items-center gap-1 text-slate-400 font-bold text-sm uppercase tracking-widest"><Icons.Location /> {selectedListing.location}</p>
+                    <h2 className="text-2xl font-black mb-2 leading-tight tracking-tight">{selectedListing.title}</h2>
+                    <p className="flex items-center gap-2 text-slate-400 font-bold text-xs uppercase tracking-widest">
+                      <Icons.Location /> {selectedListing.location}
+                    </p>
                   </div>
-                  <div className="bg-slate-900 text-white px-8 py-4 rounded-[1.5rem] text-center">
-                    <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Price</p>
+                  <div className="bg-slate-900 text-white px-8 py-5 rounded-3xl text-center shadow-xl">
+                    <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Asking Price</p>
                     <p className="text-2xl font-black">₹{selectedListing.price.toLocaleString()}</p>
                   </div>
                 </div>
-                <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 mb-8">
-                   <h3 className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4">Description</h3>
-                   <p className="text-slate-600 leading-relaxed font-medium">{selectedListing.description}</p>
+                <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 mb-8">
+                   <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Property Bio</h3>
+                   <p className="text-slate-600 leading-relaxed font-medium text-sm">{selectedListing.description}</p>
                 </div>
                 <div className="flex gap-4">
-                  <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-emerald-500 text-white py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest text-center shadow-lg active:scale-95 transition-all">Call Owner</a>
-                  <button onClick={() => { if(!user) setIsAuthOpen(true); else setIsChatOpen(true); }} className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">Chat Now</button>
+                  <a href={`tel:${selectedListing.contactNumber}`} className="flex-1 bg-emerald-500 text-white py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest text-center shadow-lg active:scale-95 transition-all">Contact Owner</a>
+                  <button onClick={() => { if(!user) setIsAuthOpen(true); else setIsChatOpen(true); }} className="flex-1 bg-slate-900 text-white py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all shadow-xl">Chat Now</button>
                 </div>
              </div>
           </div>
         )}
 
-        {(currentView === 'settings' || currentView === 'profile') && user && (
+        {(currentView === 'settings' || currentView === 'profile' || currentView === 'myads' || currentView === 'saved') && user && (
           <SettingsScreen 
             user={user} onUpdateUser={setUser} 
             onBack={() => setCurrentView('home')} 
@@ -233,7 +351,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 p-6 z-[1000] pointer-events-none">
+      <nav className="fixed bottom-0 left-0 right-0 p-6 z-[2000] pointer-events-none">
         <div className="max-w-md mx-auto bg-slate-900/95 backdrop-blur-2xl rounded-[2.5rem] p-3 shadow-2xl flex items-center justify-around pointer-events-auto border border-white/5">
            {[
              { v: 'home' as ViewState, i: Icons.Home },
@@ -242,7 +360,7 @@ const App: React.FC = () => {
              { v: 'myads' as ViewState, i: Icons.List },
              { v: 'profile' as ViewState, i: Icons.User }
            ].map(btn => (
-             <button key={btn.v} onClick={() => { if(!user && btn.v !== 'home') setIsAuthOpen(true); else setCurrentView(btn.v); }} className={btn.special ? "w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-white -mt-10 border-4 border-slate-900 shadow-xl active:scale-90 transition-all" : `p-4 transition-all ${currentView === btn.v ? 'text-emerald-400 scale-110' : 'text-slate-500'}`}>
+             <button key={btn.v} onClick={() => { if(!user && btn.v !== 'home') setIsAuthOpen(true); else { setEditingListing(null); setCurrentView(btn.v); } }} className={btn.special ? "w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-white -mt-10 border-4 border-slate-900 shadow-xl active:scale-90 transition-all" : `p-4 transition-all ${currentView === btn.v ? 'text-emerald-400 scale-110' : 'text-slate-500'}`}>
                 <btn.i active={currentView === btn.v} />
              </button>
            ))}

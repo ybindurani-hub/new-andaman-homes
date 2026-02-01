@@ -3,10 +3,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { 
   getAuth,
   setPersistence,
-  indexedDBLocalPersistence,
   browserLocalPersistence,
   GoogleAuthProvider, 
-  signInWithPopup, 
   signInWithRedirect,
   getRedirectResult,
   signOut, 
@@ -23,14 +21,12 @@ import {
   query, 
   orderBy,
   doc,
-  deleteDoc,
-  updateDoc,
   setDoc,
   getDoc,
-  where,
+  updateDoc,
+  deleteDoc,
   limit,
   startAfter,
-  serverTimestamp,
   onSnapshot,
   enableMultiTabIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -49,75 +45,75 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Mock Data for Fallback
-const INITIAL_MOCK_LISTINGS: PropertyListing[] = [
-  {
-    id: 'mock_1',
-    title: 'Luxury Seaside Villa',
-    description: 'Breathtaking 3-bedroom villa near Radhanagar Beach. Features modern island architecture and private pool.',
-    price: 18500000,
-    location: 'Havelock Island (Swaraj Dweep)',
-    category: ListingCategory.HOUSE_SALE,
-    area: '2800',
-    areaUnit: 'sq.ft',
-    imageUrls: ['https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&q=80&w=800'],
-    ownerId: 'owner_1',
-    ownerName: 'Islander Rahul',
-    contactNumber: '9933212345',
-    postedAt: Date.now() - 3600000,
-    parking: ParkingOption.BOTH,
-    floor: 'Ground',
-    postedBy: PostedBy.OWNER,
-    status: ListingStatus.ACTIVE
-  },
-  {
-    id: 'mock_2',
-    title: 'Commercial Space - Aberdeen Bazaar',
-    description: 'Prime ground floor retail space in the heart of Port Blair. Perfect for cafes or boutique shops.',
-    price: 35000,
-    location: 'Port Blair',
-    category: ListingCategory.SHOP_RENT,
-    area: '600',
-    areaUnit: 'sq.ft',
-    imageUrls: ['https://images.unsplash.com/photo-1555436169-20e93ea9a7ff?auto=format&fit=crop&q=80&w=800'],
-    ownerId: 'owner_2',
-    ownerName: 'Priya Das',
-    contactNumber: '9933254321',
-    postedAt: Date.now() - 86400000,
-    parking: ParkingOption.NONE,
-    floor: '1st Floor',
-    postedBy: PostedBy.OWNER,
-    status: ListingStatus.ACTIVE
-  }
-];
+// Critical: Set persistence to Local immediately for PWA/WebView stability
+setPersistence(auth, browserLocalPersistence)
+  .catch(err => console.error("Persistence configuration failed", err));
 
-export const logger = {
-  info: (...args: any[]) => { if (location.hostname === 'localhost') console.log('[AH-INFO]', ...args); },
-  warn: (...args: any[]) => { console.warn('[AH-WARN]', ...args); },
-  error: (...args: any[]) => { console.error('[AH-ERROR]', ...args); }
-};
-
+// Enable offline persistence for Firestore to handle BSNL network drops
 enableMultiTabIndexedDbPersistence(db).catch(() => {});
 
-setPersistence(auth, indexedDBLocalPersistence)
-  .catch(() => setPersistence(auth, browserLocalPersistence));
-
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ 
+  prompt: 'select_account',
+  // Helps some mobile browsers recognize the return intent
+  display: 'touch' 
+});
 
-const withRetry = async <T>(fn: () => Promise<T>, retries = 2): Promise<T> => {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fn();
-    } catch (err: any) {
-      if (i === retries) throw err;
-      await new Promise(r => setTimeout(r, 1000));
+/**
+ * Handles the result of a Google Redirect sign-in.
+ * Optimized for Vercel -> App transitions.
+ */
+export const handleAuthRedirect = async (): Promise<User | null> => {
+  try {
+    // getRedirectResult resolves to null if no redirect occurred
+    const result = await getRedirectResult(auth);
+    
+    if (result?.user) {
+      const userData: User = {
+        id: result.user.uid,
+        name: result.user.displayName || 'Islander',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || undefined
+      };
+      
+      // Force immediate local sync before resolving to UI
+      localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
+      await syncUserToFirestore(userData);
+      return userData;
+    }
+  } catch (error: any) {
+    console.error("Auth Redirect Handshake Error:", error.code);
+    // Ignore cases where the user just cancelled or nothing happened
+    if (error.code !== 'auth/no-auth-event') {
+       throw error;
     }
   }
-  throw new Error('Operation Failed');
+  return null;
+};
+
+const syncUserToFirestore = async (userData: User) => {
+  try {
+    const userRef = doc(db, "users", userData.id);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      await setDoc(userRef, { 
+        ...userData, 
+        createdAt: Date.now(),
+        lastLogin: Date.now()
+      });
+    } else {
+      await updateDoc(userRef, { 
+        name: userData.name, 
+        lastLogin: Date.now() 
+      });
+    }
+  } catch (e) {
+    // Fail gracefully for network/permission issues
+    console.warn("Firestore sync deferred (Offline mode active)");
+  }
 };
 
 export const getUserData = async (userId: string): Promise<User | null> => {
-  // Check local cache first for Demo Mode persistence
   const cached = localStorage.getItem(`ah_user_${userId}`);
   if (cached) return JSON.parse(cached);
 
@@ -129,141 +125,127 @@ export const getUserData = async (userId: string): Promise<User | null> => {
       return data;
     }
   } catch (err) {
-    logger.error("Fetch User Data Fallback to Local Only", err);
+    console.error("User fetch error", err);
   }
   return null;
 };
 
-export const updateUserProfile = async (userId: string, data: { name?: string, phoneNumber?: string }): Promise<void> => {
-  // Sync Local first for immediate feedback
-  const cached = localStorage.getItem(`ah_user_${userId}`);
-  const base = cached ? JSON.parse(cached) : { id: userId, email: auth.currentUser?.email || '' };
-  const updated = { ...base, ...data };
-  localStorage.setItem(`ah_user_${userId}`, JSON.stringify(updated));
+export const loginWithGoogleRedirect = async () => {
+  // STRICT RULE: No Popup. 
+  // Redirect allows the browser to handle the Google UI in a full-screen context,
+  // which is much more reliable on mobile and low-bandwidth networks.
+  await signInWithRedirect(auth, googleProvider);
+};
 
-  try {
-    await withRetry(async () => {
-      const userRef = doc(db, "users", userId);
-      await setDoc(userRef, updated, { merge: true });
-      if (auth.currentUser && data.name) {
-        await updateProfile(auth.currentUser, { displayName: data.name });
-      }
-    });
-  } catch (err) {
-    logger.warn("Profile synced to local only (DB Locked)");
+export const signUpWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
+  const result = await createUserWithEmailAndPassword(auth, email, pass);
+  await updateProfile(result.user, { displayName: name });
+  const userData = { id: result.user.uid, name, email };
+  await syncUserToFirestore(userData);
+  localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
+  return userData;
+};
+
+export const signInWithEmail = async (email: string, pass: string): Promise<User> => {
+  const result = await signInWithEmailAndPassword(auth, email, pass);
+  const userData = { 
+    id: result.user.uid, 
+    name: result.user.displayName || 'User', 
+    email: result.user.email || '' 
+  };
+  // Pre-cache to avoid secondary loading state
+  localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(userData));
+  return userData;
+};
+
+export const logout = async () => {
+  if (auth.currentUser) {
+    localStorage.removeItem(`ah_user_${auth.currentUser.uid}`);
+  }
+  await signOut(auth);
+};
+
+export const updateUserProfile = async (userId: string, data: Partial<User>): Promise<void> => {
+  const userRef = doc(db, "users", userId);
+  await updateDoc(userRef, data as any);
+  
+  const cachedKey = `ah_user_${userId}`;
+  const cached = localStorage.getItem(cachedKey);
+  if (cached) {
+    const user = JSON.parse(cached);
+    localStorage.setItem(cachedKey, JSON.stringify({ ...user, ...data }));
   }
 };
 
 export const getAuthErrorMessage = (errorCode: string): string => {
   switch (errorCode) {
-    case 'auth/network-request-failed': return 'Island signal weak. Check BSNL.';
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential': return 'Incorrect login details.';
-    default: return `Something went wrong. Try again.`;
+    case 'auth/invalid-email': return 'Invalid email format.';
+    case 'auth/user-not-found': return 'Account not found.';
+    case 'auth/wrong-password': return 'Incorrect password.';
+    case 'auth/email-already-in-use': return 'Email already registered.';
+    case 'auth/network-request-failed': return 'Island signal lost. Reconnecting...';
+    case 'auth/too-many-requests': return 'Too many attempts. Wait a moment.';
+    case 'auth/redirect-cancelled-by-user': return 'Login cancelled.';
+    default: return 'Authentication error. Please try again.';
   }
 };
 
-export const loginWithGoogle = async (): Promise<User | void> => {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (isMobile) return signInWithRedirect(auth, googleProvider);
-  // Fix: Explicitly cast result of withRetry to any to avoid TypeScript unknown error.
-  const result: any = await withRetry(() => signInWithPopup(auth, googleProvider));
-  return { id: result.user.uid, name: result.user.displayName || 'User', email: result.user.email || '' };
-};
+// --- DATA METHODS ---
 
-export const signUpWithEmail = async (email: string, pass: string, name: string): Promise<User> => {
-  // Fix: Explicitly cast result of withRetry to any to avoid TypeScript unknown error.
-  const result: any = await withRetry(() => createUserWithEmailAndPassword(auth, email, pass));
-  await updateProfile(result.user, { displayName: name });
-  await updateUserProfile(result.user.uid, { name });
-  return { id: result.user.uid, name, email };
-};
-
-export const signInWithEmail = async (email: string, pass: string): Promise<User> => {
-  // Fix: Explicitly cast result of withRetry to any to avoid TypeScript unknown error.
-  const result: any = await withRetry(() => signInWithEmailAndPassword(auth, email, pass));
-  return { id: result.user.uid, name: result.user.displayName || 'User', email: result.user.email || '' };
-};
-
-export const logout = async () => await signOut(auth);
-
-export const getListings = async (lastVisibleDoc?: any, pageSize: number = 6): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
+export const getListings = async (lastDoc?: any, pageSize = 8): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
   try {
-    const q = lastVisibleDoc 
-      ? query(collection(db, "listings"), orderBy("postedAt", "desc"), startAfter(lastVisibleDoc), limit(pageSize))
-      : query(collection(db, "listings"), orderBy("postedAt", "desc"), limit(pageSize));
-    
-    const snap = await getDocs(q);
-    const listings = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PropertyListing));
-    return { listings, lastDoc: snap.docs[snap.docs.length - 1] };
-  } catch (err: any) {
-    if (err.code === 'permission-denied' || err.message?.includes('permission')) {
-      logger.info("Using Demo-Mode Mock Data (Permissions Locked)");
-      return { listings: INITIAL_MOCK_LISTINGS, lastDoc: null };
+    let q = query(collection(db, "listings"), orderBy("postedAt", "desc"), limit(pageSize));
+    if (lastDoc) {
+      q = query(collection(db, "listings"), orderBy("postedAt", "desc"), startAfter(lastDoc), limit(pageSize));
     }
-    logger.error("Listing Fetch Error:", err);
+    const snap = await getDocs(q);
+    const listings = snap.docs.map(d => ({ id: d.id, ...d.data() } as PropertyListing));
+    return { listings, lastDoc: snap.docs[snap.docs.length - 1] };
+  } catch (err) {
     return { listings: [], lastDoc: null };
   }
 };
 
-export const addListing = async (listingData: any, user: User): Promise<PropertyListing> => {
-  const listing = { 
-    ...listingData, 
-    ownerId: user.id, 
-    ownerName: user.name, 
-    postedAt: Date.now() 
-  };
-  try {
-    const docRef = await addDoc(collection(db, "listings"), listing);
-    return { id: docRef.id, ...listing } as PropertyListing;
-  } catch (err) {
-    logger.warn("Listing saved to UI state only (DB Locked)");
-    return { id: `local_${Date.now()}`, ...listing } as PropertyListing;
-  }
+export const addListing = async (data: any, user: User): Promise<PropertyListing> => {
+  const listing = { ...data, ownerId: user.id, ownerName: user.name, postedAt: Date.now() };
+  const ref = await addDoc(collection(db, "listings"), listing);
+  return { id: ref.id, ...listing } as PropertyListing;
 };
 
-export const deleteListing = async (listingId: string) => {
-  try { await deleteDoc(doc(db, "listings", listingId)); } catch {}
+export const updateListing = async (listingId: string, data: Partial<PropertyListing>): Promise<void> => {
+  const ref = doc(db, "listings", listingId);
+  await updateDoc(ref, data as any);
 };
 
-export const updateListingStatus = async (listingId: string, status: ListingStatus) => {
-  try { await updateDoc(doc(db, "listings", listingId), { status }); } catch {}
-};
+export const deleteListing = async (id: string) => await deleteDoc(doc(db, "listings", id));
+export const updateListingStatus = async (id: string, status: ListingStatus) => await updateDoc(doc(db, "listings", id), { status });
 
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
   const key = `ah_favs_${userId}`;
-  const current = JSON.parse(localStorage.getItem(key) || '[]');
-  const next = current.includes(listingId) ? current.filter((id: any) => id !== listingId) : [...current, listingId];
+  const favs = JSON.parse(localStorage.getItem(key) || '[]');
+  const next = favs.includes(listingId) ? favs.filter((i: string) => i !== listingId) : [...favs, listingId];
   localStorage.setItem(key, JSON.stringify(next));
-  
-  try { await updateDoc(doc(db, "users", userId), { favorites: next }); } catch {}
   return next;
 };
 
 export const getFavorites = async (userId: string): Promise<string[]> => {
-  const key = `ah_favs_${userId}`;
-  try {
-    const snap = await getDoc(doc(db, "users", userId));
-    const favs = snap.data()?.favorites || JSON.parse(localStorage.getItem(key) || '[]');
-    localStorage.setItem(key, JSON.stringify(favs));
-    return favs;
-  } catch {
-    return JSON.parse(localStorage.getItem(key) || '[]');
-  }
+  return JSON.parse(localStorage.getItem(`ah_favs_${userId}`) || '[]');
 };
 
 export const sendMessage = async (listingId: string, ownerId: string, user: User, text: string) => {
   const chatId = `${listingId}_${ownerId}_${user.id}`;
-  await addDoc(collection(db, "chats", chatId, "messages"), { senderId: user.id, senderName: user.name, text, timestamp: Date.now() });
+  await addDoc(collection(db, "chats", chatId, "messages"), {
+    senderId: user.id,
+    senderName: user.name,
+    text,
+    timestamp: Date.now()
+  });
 };
 
-export const listenToMessages = (listingId: string, ownerId: string, userId: string, callback: (messages: ChatMessage[]) => void) => {
+export const listenToMessages = (listingId: string, ownerId: string, userId: string, callback: (msgs: ChatMessage[]) => void) => {
   const chatId = `${listingId}_${ownerId}_${userId}`;
   const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
-  }, () => {
-    callback([{ id: 'm1', senderId: 'system', senderName: 'System', text: 'Chat system in local standby mode.', timestamp: Date.now() }]);
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
   });
 };

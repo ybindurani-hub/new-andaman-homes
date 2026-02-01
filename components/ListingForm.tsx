@@ -1,33 +1,34 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ListingCategory, FurnishingStatus, PostedBy, ParkingOption, ListingStatus } from '../types.ts';
+import { ListingCategory, FurnishingStatus, PostedBy, ParkingOption, ListingStatus, PropertyListing } from '../types.ts';
 import { ANDAMAN_LOCATIONS, Icons } from '../constants.tsx';
 
 interface ListingFormProps {
   onSubmit: (listing: any) => Promise<void>;
   onCancel: () => void;
+  initialData?: PropertyListing;
 }
 
-const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
+const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel, initialData }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.imageUrls || []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    price: '',
-    location: ANDAMAN_LOCATIONS[0],
-    category: ListingCategory.HOUSE_RENT,
-    area: '',
-    areaUnit: 'sq.ft' as 'sq.ft' | 'sq.mt',
-    contactNumber: '',
-    parking: ParkingOption.NONE,
-    furnishing: FurnishingStatus.SEMI_FURNISHED,
-    floor: 'Ground',
-    postedBy: PostedBy.OWNER,
+    title: initialData?.title || '',
+    description: initialData?.description || '',
+    price: initialData?.price?.toString() || '',
+    location: initialData?.location || ANDAMAN_LOCATIONS[0],
+    category: initialData?.category || ListingCategory.HOUSE_RENT,
+    area: initialData?.area || '',
+    areaUnit: initialData?.areaUnit || 'sq.ft' as 'sq.ft' | 'sq.mt',
+    contactNumber: initialData?.contactNumber || '',
+    parking: initialData?.parking || ParkingOption.NONE,
+    furnishing: initialData?.furnishing || FurnishingStatus.SEMI_FURNISHED,
+    floor: initialData?.floor || 'Ground',
+    postedBy: initialData?.postedBy || PostedBy.OWNER,
   });
 
   const compressImage = (file: File): Promise<string> => {
@@ -74,7 +75,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
       ...formData,
       price: Number(formData.price),
       imageUrls: imagePreviews,
-      status: ListingStatus.ACTIVE
+      status: initialData?.status || ListingStatus.ACTIVE
     });
     setIsSubmitting(false);
   };
@@ -87,11 +88,13 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
              <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mb-4">
                 <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
              </div>
-             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Uploading to Island Servers...</p>
+             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+               {initialData ? 'Updating Listing...' : 'Uploading to Island Servers...'}
+             </p>
           </div>
         )}
 
-        <h2 className="text-3xl font-black mb-10 text-center">Post Property</h2>
+        <h2 className="text-3xl font-black mb-10 text-center">{initialData ? 'Edit Property' : 'Post Property'}</h2>
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
@@ -143,7 +146,9 @@ const ListingForm: React.FC<ListingFormProps> = ({ onSubmit, onCancel }) => {
 
           <div className="flex gap-4 pt-4">
             <button type="button" onClick={onCancel} className="flex-1 py-5 rounded-2xl border border-slate-100 font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all">Cancel</button>
-            <button type="submit" className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">Publish Live</button>
+            <button type="submit" className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+              {initialData ? 'Save Changes' : 'Publish Live'}
+            </button>
           </div>
         </form>
       </div>
