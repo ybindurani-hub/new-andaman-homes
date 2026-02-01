@@ -44,13 +44,10 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// Initialize Persistence
 setPersistence(auth, browserLocalPersistence).catch(err => console.warn("Persistence set failed", err));
 enableMultiTabIndexedDbPersistence(db).catch(() => {});
 
-/**
- * Checks if a user exists in Firestore by their phone number.
- * Used to enforce "Register First" rule.
- */
 export const checkUserByPhone = async (phoneNumber: string): Promise<User | null> => {
   try {
     const q = query(collection(db, "users"), where("phoneNumber", "==", phoneNumber), limit(1));
@@ -94,7 +91,9 @@ export const syncUserToFirestore = async (userData: User) => {
 
 export const getUserData = async (userId: string): Promise<User | null> => {
   const cached = localStorage.getItem(`ah_user_${userId}`);
-  if (cached) return JSON.parse(cached);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) { localStorage.removeItem(`ah_user_${userId}`); }
+  }
   try {
     const userDoc = await getDoc(doc(db, "users", userId));
     if (userDoc.exists()) {
@@ -108,27 +107,14 @@ export const getUserData = async (userId: string): Promise<User | null> => {
   return null;
 };
 
-// Added handleAuthRedirect export to fix App.tsx import error
-/**
- * Handles the result of a sign-in redirect.
- */
 export const handleAuthRedirect = async (): Promise<User | null> => {
   try {
     const result = await getRedirectResult(auth);
     if (result?.user) {
-      const userData = await getUserData(result.user.uid);
-      if (userData) return userData;
-      
-      const newUser: User = {
-        id: result.user.uid,
-        name: result.user.displayName || 'Islander',
-        email: result.user.email || '',
-      };
-      await syncUserToFirestore(newUser);
-      return newUser;
+      return await getUserData(result.user.uid);
     }
   } catch (err) {
-    console.error("Redirect Auth Error", err);
+    console.error("Redirect Auth Handshake failed (Non-fatal)", err);
   }
   return null;
 };
@@ -143,6 +129,8 @@ export const logout = async () => {
 export const updateUserProfile = async (userId: string, data: Partial<User>): Promise<void> => {
   const userRef = doc(db, "users", userId);
   await updateDoc(userRef, data as any);
+  const updated = await getUserData(userId);
+  if (updated) localStorage.setItem(`ah_user_${userId}`, JSON.stringify({...updated, ...data}));
 };
 
 export const getAuthErrorMessage = (errorCode: string): string => {
@@ -158,22 +146,31 @@ export const getAuthErrorMessage = (errorCode: string): string => {
   }
 };
 
-export const getListings = async (lastDoc?: any, pageSize = 8): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
+export const getListings = async (lastDocParam?: any, pageSize = 20): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
   try {
-    let q = query(collection(db, "listings"), orderBy("postedAt", "desc"), limit(pageSize));
-    if (lastDoc) {
-      q = query(collection(db, "listings"), orderBy("postedAt", "desc"), startAfter(lastDoc), limit(pageSize));
+    let q;
+    if (lastDocParam) {
+      q = query(collection(db, "listings"), orderBy("postedAt", "desc"), startAfter(lastDocParam), limit(pageSize));
+    } else {
+      q = query(collection(db, "listings"), orderBy("postedAt", "desc"), limit(pageSize));
     }
     const snap = await getDocs(q);
     const listings = snap.docs.map(d => ({ id: d.id, ...d.data() } as PropertyListing));
-    return { listings, lastDoc: snap.docs[snap.docs.length - 1] };
+    return { listings, lastDoc: snap.docs[snap.docs.length - 1] || null };
   } catch (err) {
+    console.error("Error fetching listings:", err);
     return { listings: [], lastDoc: null };
   }
 };
 
 export const addListing = async (data: any, user: User): Promise<PropertyListing> => {
-  const listing = { ...data, ownerId: user.id, ownerName: user.name, postedAt: Date.now() };
+  const listing = { 
+    ...data, 
+    ownerId: user.id, 
+    ownerName: user.name, 
+    postedAt: Date.now(),
+    status: data.status || ListingStatus.ACTIVE
+  };
   const ref = await addDoc(collection(db, "listings"), listing);
   return { id: ref.id, ...listing } as PropertyListing;
 };
@@ -188,14 +185,17 @@ export const updateListingStatus = async (id: string, status: ListingStatus) => 
 
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
   const key = `ah_favs_${userId}`;
-  const favs = JSON.parse(localStorage.getItem(key) || '[]');
-  const next = favs.includes(listingId) ? favs.filter((i: string = "") => i !== listingId) : [...favs, listingId];
+  const current = JSON.parse(localStorage.getItem(key) || '[]');
+  const next = current.includes(listingId) 
+    ? current.filter((i: string) => i !== listingId) 
+    : [...current, listingId];
   localStorage.setItem(key, JSON.stringify(next));
   return next;
 };
 
 export const getFavorites = async (userId: string): Promise<string[]> => {
-  return JSON.parse(localStorage.getItem(`ah_favs_${userId}`) || '[]');
+  const key = `ah_favs_${userId}`;
+  return JSON.parse(localStorage.getItem(key) || '[]');
 };
 
 export const sendMessage = async (listingId: string, ownerId: string, user: User, text: string) => {
