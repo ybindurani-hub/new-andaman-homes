@@ -45,26 +45,21 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Enable persistence for offline support and multi-tab sync
 enableMultiTabIndexedDbPersistence(db).catch(() => {});
 
 /**
- * Checks if a user exists in Firestore.
- * If permissions are denied (common if not logged in), it assumes user is not known locally.
+ * Single source of truth for checking if a phone number is registered.
  */
 export const checkUserByPhone = async (phoneNumber: string): Promise<User | null> => {
   try {
     const q = query(collection(db, "users"), where("phoneNumber", "==", phoneNumber), limit(1));
     const snap = await getDocs(q);
     if (!snap.empty) {
-      return { id: snap.docs[0].id, ...snap.docs[0].data() } as User;
+      const data = snap.docs[0].data();
+      return { id: snap.docs[0].id, ...data } as User;
     }
   } catch (e: any) {
-    if (e.code === 'permission-denied') {
-      console.warn("User lookup restricted: Public access to users collection is disabled.");
-    } else {
-      console.error("User check error:", e);
-    }
+    console.warn("Permission restricted lookup - likely public access disabled.");
   }
   return null;
 };
@@ -92,9 +87,9 @@ export const syncUserToFirestore = async (userData: User) => {
       updatedAt: Date.now()
     };
     await setDoc(userRef, payload, { merge: true });
-    localStorage.setItem(`ah_user_${userData.id}`, JSON.stringify(payload));
+    localStorage.setItem(`ah_user_profile`, JSON.stringify(payload));
   } catch (e) {
-    console.error("Profile sync error:", e);
+    console.error("Firestore sync failed:", e);
   }
 };
 
@@ -103,27 +98,21 @@ export const getUserData = async (userId: string): Promise<User | null> => {
     const userDoc = await getDoc(doc(db, "users", userId));
     if (userDoc.exists()) {
       const data = userDoc.data() as User;
-      localStorage.setItem(`ah_user_${userId}`, JSON.stringify(data));
+      localStorage.setItem(`ah_user_profile`, JSON.stringify(data));
       return data;
     }
   } catch (err) {
-    console.error("User fetch error:", err);
+    console.error("Fetch profile failed:", err);
   }
-  const cached = localStorage.getItem(`ah_user_${userId}`);
+  const cached = localStorage.getItem(`ah_user_profile`);
   return cached ? JSON.parse(cached) : null;
 };
 
 export const logout = async () => {
-  if (auth.currentUser) {
-    localStorage.removeItem(`ah_user_${auth.currentUser.uid}`);
-  }
+  localStorage.removeItem(`ah_user_profile`);
   await signOut(auth);
 };
 
-/**
- * Fetches listings with enhanced error handling for permission issues.
- * If the database is locked to authenticated users only, this will catch the 403 and return empty.
- */
 export const getListings = async (lastDocParam?: any, pageSize = 20): Promise<{ listings: PropertyListing[], lastDoc: any }> => {
   try {
     const listingsRef = collection(db, "listings");
@@ -135,16 +124,9 @@ export const getListings = async (lastDocParam?: any, pageSize = 20): Promise<{ 
     
     const snap = await getDocs(q);
     const listings = snap.docs.map(d => ({ id: d.id, ...d.data() } as PropertyListing));
-    return { 
-      listings, 
-      lastDoc: snap.docs[snap.docs.length - 1] || null 
-    };
+    return { listings, lastDoc: snap.docs[snap.docs.length - 1] || null };
   } catch (err: any) {
-    if (err.code === 'permission-denied') {
-      console.warn("Listing fetch failed: Missing Permissions. Login may be required to view listings.");
-    } else {
-      console.error("Listing Service Error:", err.message);
-    }
+    console.warn("Market fetch failed:", err.message);
     return { listings: [], lastDoc: null };
   }
 };
@@ -168,37 +150,24 @@ export const updateListing = async (listingId: string, data: Partial<PropertyLis
 
 export const deleteListing = async (id: string) => await deleteDoc(doc(db, "listings", id));
 
-/**
- * Persistence for Saved/Favorites in Firestore.
- */
 export const toggleFavorite = async (userId: string, listingId: string): Promise<string[]> => {
-  try {
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
-    let currentFavs: string[] = userDoc.exists() ? (userDoc.data().favorites || []) : [];
-    
-    const isFav = currentFavs.includes(listingId);
-    if (isFav) {
-      await updateDoc(userRef, { favorites: arrayRemove(listingId) });
-      currentFavs = currentFavs.filter(id => id !== listingId);
-    } else {
-      await updateDoc(userRef, { favorites: arrayUnion(listingId) });
-      currentFavs = [...currentFavs, listingId];
-    }
-    return currentFavs;
-  } catch (e) {
-    console.error("Toggle favorite failed:", e);
-    throw e;
+  const userRef = doc(db, "users", userId);
+  const userDoc = await getDoc(userRef);
+  let currentFavs: string[] = userDoc.exists() ? (userDoc.data().favorites || []) : [];
+  
+  if (currentFavs.includes(listingId)) {
+    await updateDoc(userRef, { favorites: arrayRemove(listingId) });
+    currentFavs = currentFavs.filter(id => id !== listingId);
+  } else {
+    await updateDoc(userRef, { favorites: arrayUnion(listingId) });
+    currentFavs = [...currentFavs, listingId];
   }
+  return currentFavs;
 };
 
 export const getFavorites = async (userId: string): Promise<string[]> => {
-  try {
-    const userDoc = await getDoc(doc(db, "users", userId));
-    return userDoc.exists() ? (userDoc.data().favorites || []) : [];
-  } catch (e) {
-    return [];
-  }
+  const userDoc = await getDoc(doc(db, "users", userId));
+  return userDoc.exists() ? (userDoc.data().favorites || []) : [];
 };
 
 export const updateUserProfile = async (userId: string, data: Partial<User>): Promise<void> => {
@@ -209,13 +178,12 @@ export const updateUserProfile = async (userId: string, data: Partial<User>): Pr
 export const getAuthErrorMessage = (errorCode: string): string => {
   switch (errorCode) {
     case 'auth/invalid-phone-number': return 'Invalid mobile number.';
-    case 'auth/too-many-requests': return 'Too many attempts. Try later.';
-    case 'auth/code-expired': return 'OTP expired.';
+    case 'auth/too-many-requests': return 'Too many attempts. Wait a few minutes.';
+    case 'auth/code-expired': return 'OTP expired. Request a new one.';
     case 'auth/invalid-verification-code': return 'Incorrect OTP.';
     case 'user-not-found': return 'Mobile not registered. Please sign up first.';
     case 'user-exists': return 'Mobile already registered. Please login.';
-    case 'permission-denied': return 'Database Access Denied. Please login again.';
-    default: return 'Connection failed. Please check your internet.';
+    default: return 'Handshake error. Check your signal.';
   }
 };
 
@@ -234,19 +202,5 @@ export const listenToMessages = (listingId: string, ownerId: string, userId: str
   const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
-  }, (err) => {
-    console.warn("Message listener restricted:", err.message);
   });
-};
-
-export const handleAuthRedirect = async (): Promise<User | null> => {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result?.user) {
-      return await getUserData(result.user.uid);
-    }
-  } catch (err) {
-    console.warn("Auth redirect handled.");
-  }
-  return null;
 };
